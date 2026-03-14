@@ -1,9 +1,17 @@
-# Moka.Blazor.Json
+<p align="center">
+  <img src="icon.png" alt="Moka.Blazor.Json" width="128" />
+</p>
 
-A high-performance Blazor JSON viewer and editor component with virtualized rendering, search, theming, and plugin support.
+<h1 align="center">Moka.Blazor.Json</h1>
 
-[![NuGet](https://img.shields.io/nuget/v/Moka.Blazor.Json.svg)](https://www.nuget.org/packages/Moka.Blazor.Json)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+<p align="center">
+  A high-performance Blazor JSON viewer and editor component with virtualized rendering, search, theming, and plugin support.
+</p>
+
+<p align="center">
+  <a href="https://www.nuget.org/packages/Moka.Blazor.Json"><img src="https://img.shields.io/nuget/v/Moka.Blazor.Json.svg" alt="NuGet" /></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT" /></a>
+</p>
 
 ## Features
 
@@ -16,7 +24,7 @@ A high-performance Blazor JSON viewer and editor component with virtualized rend
 - **Key sorting** - sort object keys alphabetically (single level or recursive)
 - **Node scoping** - zoom into any subtree
 - **Zero external dependencies** - built on `System.Text.Json`
-- **Multi-target** - supports .NET 9 and .NET 10
+- **Multi-target** - supports .NET 8, .NET 9, and .NET 10
 
 ## Installation
 

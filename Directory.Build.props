@@ -21,11 +21,13 @@
 		<PackageReadmeFile>README.md</PackageReadmeFile>
 		<IncludeSymbols>true</IncludeSymbols>
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<PackageIcon>icon.png</PackageIcon>
 		<GenerateDocumentationFile>true</GenerateDocumentationFile>
 	</PropertyGroup>
 
-	<!-- Include README.md in NuGet packages -->
+	<!-- Include README.md and icon in NuGet packages -->
 	<ItemGroup Condition="'$(IsPackable)' == 'true'">
 		<None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="/" />
+		<None Include="$(MSBuildThisFileDirectory)icon.png" Pack="true" PackagePath="/" />
 	</ItemGroup>
 </Project>
