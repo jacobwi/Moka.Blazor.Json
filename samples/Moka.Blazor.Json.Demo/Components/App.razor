@@ -1,0 +1,28 @@
+@using static Microsoft.AspNetCore.Components.Web.RenderMode
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>Moka.Blazor.Json Demo</title>
+    <base href="/"/>
+    <HeadOutlet @rendermode="InteractiveServer"/>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px 24px 60px;
+            background: #fafafa;
+            color: #1e1e1e;
+        }
+        h1 { font-size: 28px; margin-bottom: 32px; border-bottom: 2px solid #e0e0e0; padding-bottom: 12px; }
+        h2 { font-size: 20px; margin-top: 40px; margin-bottom: 4px; color: #333; }
+        p { font-size: 14px; color: #666; margin-bottom: 12px; }
+    </style>
+</head>
+<body>
+<Routes @rendermode="InteractiveServer"/>
+<script src="_framework/blazor.web.js"></script>
+</body>
+</html>

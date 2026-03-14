@@ -1,0 +1,459 @@
+/* ============================================================
+   Moka.Blazor.Json — Theme & Base Styles
+   All values are CSS custom properties, fully overridable.
+   ============================================================ */
+
+:root,
+[data-moka-json-theme="light"] {
+    --moka-json-bg: transparent;
+    --moka-json-font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+    --moka-json-font-size: 13px;
+    --moka-json-line-height: 1.6;
+
+    /* Syntax colors */
+    --moka-json-color-key: #0451a5;
+    --moka-json-color-string: #a31515;
+    --moka-json-color-number: #098658;
+    --moka-json-color-boolean: #0000ff;
+    --moka-json-color-null: #808080;
+    --moka-json-color-bracket: #319331;
+
+    /* UI colors */
+    --moka-json-color-text: #1e1e1e;
+    --moka-json-color-border: #e0e0e0;
+    --moka-json-color-hover: rgba(0, 0, 0, 0.04);
+    --moka-json-color-selected: rgba(0, 120, 212, 0.1);
+    --moka-json-color-search-match: rgba(234, 192, 0, 0.4);
+    --moka-json-color-search-active: rgba(234, 128, 0, 0.6);
+    --moka-json-toolbar-bg: #f3f3f3;
+    --moka-json-context-bg: #ffffff;
+    --moka-json-context-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    --moka-json-scrollbar-thumb: #c1c1c1;
+    --moka-json-error-color: #d32f2f;
+    --moka-json-success-color: #388e3c;
+    --moka-json-indent-guide: rgba(0, 0, 0, 0.08);
+}
+
+[data-moka-json-theme="dark"] {
+    --moka-json-bg: #1e1e1e;
+    --moka-json-color-key: #9cdcfe;
+    --moka-json-color-string: #ce9178;
+    --moka-json-color-number: #b5cea8;
+    --moka-json-color-boolean: #569cd6;
+    --moka-json-color-null: #808080;
+    --moka-json-color-bracket: #da70d6;
+
+    --moka-json-color-text: #d4d4d4;
+    --moka-json-color-border: #3e3e3e;
+    --moka-json-color-hover: rgba(255, 255, 255, 0.05);
+    --moka-json-color-selected: rgba(0, 120, 212, 0.2);
+    --moka-json-color-search-match: rgba(234, 192, 0, 0.3);
+    --moka-json-color-search-active: rgba(234, 128, 0, 0.5);
+    --moka-json-toolbar-bg: #252526;
+    --moka-json-context-bg: #2d2d2d;
+    --moka-json-context-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+    --moka-json-scrollbar-thumb: #424242;
+    --moka-json-error-color: #ef5350;
+    --moka-json-success-color: #66bb6a;
+    --moka-json-indent-guide: rgba(255, 255, 255, 0.06);
+}
+
+/* ---- Viewer Container ---- */
+.moka-json-viewer {
+    font-family: var(--moka-json-font-family);
+    font-size: var(--moka-json-font-size);
+    line-height: var(--moka-json-line-height);
+    color: var(--moka-json-color-text);
+    background: var(--moka-json-bg);
+    border: 1px solid var(--moka-json-color-border);
+    border-radius: 4px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+/* ---- Toolbar ---- */
+.moka-json-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: var(--moka-json-toolbar-bg);
+    border-bottom: 1px solid var(--moka-json-color-border);
+    flex-shrink: 0;
+}
+
+.moka-json-toolbar button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: transparent;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    padding: 3px 6px;
+    cursor: pointer;
+    color: var(--moka-json-color-text);
+    font-family: inherit;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.moka-json-toolbar button:hover {
+    background: var(--moka-json-color-hover);
+    border-color: var(--moka-json-color-border);
+}
+
+.moka-json-toolbar-separator {
+    width: 1px;
+    height: 18px;
+    background: var(--moka-json-color-border);
+    margin: 0 2px;
+}
+
+.moka-json-toolbar-spacer {
+    flex: 1;
+}
+
+/* ---- Search ---- */
+.moka-json-search {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: var(--moka-json-toolbar-bg);
+    border-bottom: 1px solid var(--moka-json-color-border);
+    flex-shrink: 0;
+}
+
+.moka-json-search input {
+    flex: 1;
+    padding: 3px 6px;
+    border: 1px solid var(--moka-json-color-border);
+    border-radius: 3px;
+    background: var(--moka-json-bg);
+    color: var(--moka-json-color-text);
+    font-family: inherit;
+    font-size: 12px;
+    outline: none;
+}
+
+.moka-json-search input:focus {
+    border-color: #007acc;
+}
+
+.moka-json-search-info {
+    font-size: 11px;
+    color: var(--moka-json-color-null);
+    white-space: nowrap;
+}
+
+/* ---- Breadcrumb ---- */
+.moka-json-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    padding: 2px 8px;
+    background: var(--moka-json-toolbar-bg);
+    border-bottom: 1px solid var(--moka-json-color-border);
+    font-size: 12px;
+    flex-shrink: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+}
+
+.moka-json-breadcrumb-segment {
+    cursor: pointer;
+    padding: 1px 4px;
+    border-radius: 2px;
+    color: var(--moka-json-color-key);
+}
+
+.moka-json-breadcrumb-segment:hover {
+    background: var(--moka-json-color-hover);
+}
+
+.moka-json-breadcrumb-separator {
+    color: var(--moka-json-color-null);
+    user-select: none;
+}
+
+.moka-json-breadcrumb-type {
+    color: var(--moka-json-color-bracket);
+    font-size: 10px;
+    margin-right: 2px;
+}
+
+/* ---- Tree Viewport ---- */
+.moka-json-tree-viewport {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
+    padding: 4px 0;
+    /* Firefox scrollbar */
+    scrollbar-width: thin;
+    scrollbar-color: var(--moka-json-scrollbar-thumb) transparent;
+}
+
+/* Webkit scrollbar (Chrome, Safari, Edge) */
+.moka-json-tree-viewport::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+.moka-json-tree-viewport::-webkit-scrollbar-thumb {
+    background: var(--moka-json-scrollbar-thumb);
+    border-radius: 5px;
+}
+
+/* ---- Line Numbers ---- */
+.moka-json-line-number {
+    display: inline-block;
+    min-width: 3ch;
+    padding: 0 8px 0 8px;
+    text-align: right;
+    color: var(--moka-json-color-null);
+    border-right: 1px solid var(--moka-json-color-border);
+    margin-right: 8px;
+    user-select: none;
+    flex-shrink: 0;
+    font-size: inherit;
+    line-height: inherit;
+}
+
+/* ---- Node Row ---- */
+.moka-json-node {
+    display: flex;
+    align-items: baseline;
+    padding: 0 8px 0 0;
+    cursor: default;
+    white-space: nowrap;
+    min-height: calc(var(--moka-json-font-size) * var(--moka-json-line-height));
+}
+
+.moka-json-node:hover {
+    background: var(--moka-json-color-hover);
+}
+
+.moka-json-node--selected {
+    background: var(--moka-json-color-selected);
+}
+
+.moka-json-node--search-match {
+    background: var(--moka-json-color-search-match);
+}
+
+.moka-json-node--search-active {
+    background: var(--moka-json-color-search-active);
+}
+
+.moka-json-node:focus-visible {
+    outline: 2px solid var(--moka-json-color-key);
+    outline-offset: -2px;
+}
+
+.moka-json-node-indent {
+    display: inline-block;
+    flex-shrink: 0;
+}
+
+.moka-json-node-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+    user-select: none;
+    color: var(--moka-json-color-text);
+    font-size: 10px;
+    opacity: 0.7;
+    border: none;
+    background: transparent;
+    padding: 0;
+}
+
+.moka-json-node-toggle:hover {
+    opacity: 1;
+}
+
+.moka-json-node-toggle-placeholder {
+    display: inline-block;
+    width: 16px;
+    flex-shrink: 0;
+}
+
+.moka-json-key {
+    color: var(--moka-json-color-key);
+    margin-right: 4px;
+}
+
+.moka-json-key::after {
+    content: ':';
+    color: var(--moka-json-color-text);
+    margin-left: 1px;
+    margin-right: 4px;
+}
+
+.moka-json-value--string {
+    color: var(--moka-json-color-string);
+}
+
+.moka-json-value--string::before,
+.moka-json-value--string::after {
+    content: '"';
+}
+
+.moka-json-value--number {
+    color: var(--moka-json-color-number);
+}
+
+.moka-json-value--boolean {
+    color: var(--moka-json-color-boolean);
+}
+
+.moka-json-value--null {
+    color: var(--moka-json-color-null);
+    font-style: italic;
+}
+
+.moka-json-bracket {
+    color: var(--moka-json-color-bracket);
+}
+
+.moka-json-collapsed-preview {
+    color: var(--moka-json-color-null);
+    font-style: italic;
+    margin-left: 4px;
+}
+
+.moka-json-comma {
+    color: var(--moka-json-color-text);
+}
+
+/* ---- Context Menu ---- */
+.moka-json-context-menu {
+    position: fixed;
+    background: var(--moka-json-context-bg);
+    border: 1px solid var(--moka-json-color-border);
+    border-radius: 4px;
+    box-shadow: var(--moka-json-context-shadow);
+    padding: 4px 0;
+    min-width: 180px;
+    z-index: 10000;
+    font-size: 12px;
+}
+
+.moka-json-context-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 12px;
+    cursor: pointer;
+    color: var(--moka-json-color-text);
+    gap: 16px;
+}
+
+.moka-json-context-item:hover {
+    background: var(--moka-json-color-selected);
+}
+
+.moka-json-context-item--disabled {
+    opacity: 0.4;
+    cursor: default;
+}
+
+.moka-json-context-item--disabled:hover {
+    background: transparent;
+}
+
+.moka-json-context-item-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.moka-json-context-item-shortcut {
+    color: var(--moka-json-color-null);
+    font-size: 11px;
+}
+
+.moka-json-context-separator {
+    height: 1px;
+    background: var(--moka-json-color-border);
+    margin: 4px 0;
+}
+
+/* ---- Bottom Bar ---- */
+.moka-json-bottom-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 3px 8px;
+    background: var(--moka-json-toolbar-bg);
+    border-top: 1px solid var(--moka-json-color-border);
+    font-size: 11px;
+    color: var(--moka-json-color-null);
+    flex-shrink: 0;
+    overflow-x: auto;
+    white-space: nowrap;
+}
+
+.moka-json-bottom-bar-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.moka-json-validation-valid {
+    color: var(--moka-json-success-color);
+}
+
+.moka-json-validation-invalid {
+    color: var(--moka-json-error-color);
+}
+
+/* ---- Error State ---- */
+.moka-json-error {
+    padding: 16px;
+    color: var(--moka-json-error-color);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.moka-json-error-title {
+    font-weight: 600;
+}
+
+.moka-json-error-details {
+    font-size: 12px;
+    opacity: 0.8;
+}
+
+/* ---- Loading State ---- */
+.moka-json-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+    color: var(--moka-json-color-null);
+}
+
+/* ---- Inline Editor ---- */
+.moka-json-inline-edit {
+    padding: 1px 4px;
+    border: 1px solid #007acc;
+    border-radius: 2px;
+    background: var(--moka-json-bg);
+    color: var(--moka-json-color-text);
+    font-family: inherit;
+    font-size: inherit;
+    outline: none;
+    min-width: 50px;
+}
+
+.moka-json-inline-edit--error {
+    border-color: var(--moka-json-error-color);
+}

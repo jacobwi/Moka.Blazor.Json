@@ -1,0 +1,16 @@
+@namespace Moka.Blazor.Json.Components
+
+<div class="moka-json-toolbar">
+    <button @onclick="OnSearchToggle" title="Search (Ctrl+F)">Search</button>
+    <span class="moka-json-toolbar-separator"></span>
+    <button @onclick="OnExpandAll" title="Expand All">Expand</button>
+    <button @onclick="OnCollapseAll" title="Collapse All">Collapse</button>
+    <span class="moka-json-toolbar-separator"></span>
+    <button @onclick="OnFormatToggle" title="Toggle Format">@(IsFormatted ? "Minify" : "Format")</button>
+    <button @onclick="OnCopyAll" title="Copy All">Copy</button>
+    <span class="moka-json-toolbar-spacer"></span>
+    @if (ToolbarExtra is not null)
+    {
+        @ToolbarExtra
+    }
+</div>

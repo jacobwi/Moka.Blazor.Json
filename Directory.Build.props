@@ -1,0 +1,26 @@
+<Project>
+	<PropertyGroup>
+		<LangVersion>latest</LangVersion>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+		<AnalysisLevel>latest-All</AnalysisLevel>
+	</PropertyGroup>
+
+	<!-- NuGet package metadata shared by all packable projects -->
+	<PropertyGroup Condition="'$(IsPackable)' == 'true'">
+		<Authors>Moka;BCat;jacobwi</Authors>
+		<Copyright>Copyright (c) Moka 2026</Copyright>
+		<Description>A high-performance Blazor JSON viewer and editor component with virtualized rendering, search, theming, and plugin support.</Description>
+		<PackageTags>blazor;json;viewer;editor;component;blazor-component;json-viewer;json-editor</PackageTags>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/jacobwi/Moka.Blazor.Json</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/jacobwi/Moka.Blazor.Json</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+	</PropertyGroup>
+</Project>

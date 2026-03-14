@@ -1,0 +1,35 @@
+@namespace Moka.Blazor.Json.Components
+
+<div class="moka-json-search">
+    <input type="text"
+           placeholder="Search..."
+           value="@Query"
+           @oninput="HandleInput"
+           @onkeydown="HandleKeyDown"
+           id="@InputId"/>
+
+    <label style="font-size: 11px; display: flex; align-items: center; gap: 2px;">
+        <input type="checkbox" checked="@CaseSensitive" @onchange="HandleCaseSensitiveChange"/>
+        Aa
+    </label>
+
+    <label style="font-size: 11px; display: flex; align-items: center; gap: 2px;">
+        <input type="checkbox" checked="@UseRegex" @onchange="HandleRegexChange"/>
+        .*
+    </label>
+
+    <span class="moka-json-search-info">
+        @if (MatchCount > 0)
+        {
+            @($"{ActiveMatchIndex + 1} of {MatchCount}")
+        }
+        else if (!string.IsNullOrEmpty(Query))
+        {
+            <span>No matches</span>
+        }
+    </span>
+
+    <button @onclick="OnPrevious" title="Previous (Shift+F3)" disabled="@(MatchCount == 0)">&#x25B2;</button>
+    <button @onclick="OnNext" title="Next (F3)" disabled="@(MatchCount == 0)">&#x25BC;</button>
+    <button @onclick="OnClose" title="Close (Esc)">&#x2715;</button>
+</div>

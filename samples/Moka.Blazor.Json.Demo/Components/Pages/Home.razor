@@ -1,0 +1,94 @@
+@page "/"
+
+<h1>Moka.Blazor.Json Demo</h1>
+
+<!-- ====== 1. Basic Viewer ====== -->
+<h2>1. Basic Viewer</h2>
+<p>Default settings with toolbar, breadcrumb, and bottom bar.</p>
+<MokaJsonViewer Json="@_sampleJson" Height="500px"/>
+
+<!-- ====== 2. Dark Theme ====== -->
+<h2>2. Dark Theme</h2>
+<p>Full dark theme with all features enabled.</p>
+<MokaJsonViewer Json="@_sampleJson" Theme="MokaJsonTheme.Dark" Height="400px"/>
+
+<!-- ====== 3. Minimal ====== -->
+<h2>3. Minimal (No Chrome)</h2>
+<p>Toolbar, bottom bar, and breadcrumb all hidden. Collapsed to depth 1.</p>
+<MokaJsonViewer Json="@_sampleJson" ShowToolbar="false" ShowBottomBar="false" ShowBreadcrumb="false" Height="250px" MaxDepthExpanded="1"/>
+
+<!-- ====== 4. With Line Numbers ====== -->
+<h2>4. With Line Numbers</h2>
+<p>Code-editor style gutter with line numbers enabled.</p>
+<MokaJsonViewer Json="@_sampleJson" ShowLineNumbers="true" Height="400px"/>
+
+<!-- ====== 5. Deep Nesting ====== -->
+<h2>5. Deeply Nested JSON</h2>
+<p>10 levels deep — tests indentation, expand/collapse, and breadcrumb navigation.</p>
+<MokaJsonViewer Json="@_deepNestedJson" Height="500px" MaxDepthExpanded="3" ShowLineNumbers="true"/>
+
+<!-- ====== 6. Large Array ====== -->
+<h2>6. Large Array (10,000 items)</h2>
+<p>Virtualized rendering of a flat array with 10k numeric entries.</p>
+<MokaJsonViewer Json="@_largeArrayJson" Height="400px" MaxDepthExpanded="1"/>
+
+<!-- ====== 7. Mixed Types ====== -->
+<h2>7. Mixed Value Types</h2>
+<p>Showcases all JSON value types: strings, numbers, booleans, null, arrays, objects.</p>
+<MokaJsonViewer Json="@_mixedTypesJson" Height="500px" MaxDepthExpanded="5"/>
+
+<!-- ====== 8. API Response ====== -->
+<h2>8. API Response (Realistic)</h2>
+<p>A realistic paginated API response with metadata, links, and nested resources.</p>
+<MokaJsonViewer Json="@_apiResponseJson" Height="500px" Theme="MokaJsonTheme.Dark" ShowLineNumbers="true"/>
+
+<!-- ====== 9. GeoJSON ====== -->
+<h2>9. GeoJSON FeatureCollection</h2>
+<p>Geospatial data with coordinate arrays and properties.</p>
+<MokaJsonViewer Json="@_geoJson" Height="500px"/>
+
+<!-- ====== 10. Custom Context Menu Actions ====== -->
+<h2>10. Custom Context Menu Actions</h2>
+<p>Right-click nodes to see context-aware actions: "Open URL" appears on URLs, "Copy Email" on email fields, "Show Type Info" on any node.</p>
+<MokaJsonViewer Json="@_contextMenuDemoJson" Height="500px" ContextMenuActions="@_customContextActions"/>
+@if (_lastActionMessage is not null)
+{
+    <div style="margin-top: 8px; padding: 8px 12px; background: #e8f5e9; border-radius: 4px; font-family: monospace; font-size: 13px;">
+        @_lastActionMessage
+    </div>
+}
+
+<!-- ====== 11. Stress Test ====== -->
+<h2>11. Stress Test — Large JSON</h2>
+<p>
+    Generate a large JSON document to test performance and virtualization.
+    <strong>Warning:</strong> very large sizes will use significant memory.
+</p>
+<div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
+    <label>Target size (MB):</label>
+    <input type="number" @bind="_targetSizeMb" min="1" max="1000" style="width: 100px; padding: 4px 8px;"/>
+    <button @onclick="GenerateStressTest" disabled="@_isGenerating"
+            style="padding: 6px 16px; cursor: pointer;">
+        @if (_isGenerating)
+        {
+            <span>Generating... @_generationProgress</span>
+        }
+        else
+        {
+            <span>Generate</span>
+        }
+    </button>
+    @if (_stressTestStream is not null)
+    {
+        <span style="color: #666; font-size: 12px;">
+            @FormatBytes(_stressTestSize) on disk |
+            @_stressTestNodeCount.ToString("N0") estimated nodes |
+            Generated in @_stressTestGenTime
+        </span>
+    }
+</div>
+
+@if (_stressTestStream is not null)
+{
+    <MokaJsonViewer JsonStream="@_stressTestStream" Height="600px" MaxDepthExpanded="1" ShowLineNumbers="true"/>
+}

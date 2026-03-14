@@ -1,0 +1,19 @@
+@namespace Moka.Blazor.Json.Components
+
+<div class="moka-json-breadcrumb">
+    <span class="moka-json-breadcrumb-segment" @onclick="() => OnNavigate.InvokeAsync(string.Empty)">
+        <span class="moka-json-breadcrumb-type">@RootTypeIcon</span>$
+    </span>
+
+    @foreach (var segment in Segments)
+    {
+        <span class="moka-json-breadcrumb-separator">.</span>
+        <span class="moka-json-breadcrumb-segment" @onclick="() => OnNavigate.InvokeAsync(segment.Path)">
+            @if (segment.TypeIcon is not null)
+            {
+                <span class="moka-json-breadcrumb-type">@segment.TypeIcon</span>
+            }
+            @segment.DisplayLabel
+        </span>
+    }
+</div>
