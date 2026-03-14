@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk.Razor">
 
   <PropertyGroup>
-    <TargetFrameworks>net8.0;net9.0;net10.0</TargetFrameworks>
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <IsPackable>true</IsPackable>
     <PackageId>Moka.Blazor.Json</PackageId>
     <Description>A high-performance, zero-dependency Blazor JSON viewer and editor component with virtualization, theming, and streaming support.</Description>
@@ -25,15 +25,7 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
-  <!-- net8.0 -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net8.0'">
-    <PackageReference Include="Microsoft.AspNetCore.Components.Web" VersionOverride="8.0.13" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" VersionOverride="8.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Options" VersionOverride="8.0.2" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" VersionOverride="8.0.3" />
-  </ItemGroup>
-
-  <!-- net10.0 -->
+<!-- net10.0 -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
     <PackageReference Include="Microsoft.AspNetCore.Components.Web" VersionOverride="10.0.5" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" VersionOverride="10.0.5" />

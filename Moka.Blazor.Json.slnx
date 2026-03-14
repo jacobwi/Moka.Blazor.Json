@@ -3,6 +3,7 @@
     <File Path="Directory.Build.props" />
     <File Path="Directory.Packages.props" />
     <File Path=".github/workflows/ci.yml" />
+    <File Path="README.md" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Moka.Blazor.Json.Demo/Moka.Blazor.Json.Demo.csproj" />
