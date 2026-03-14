@@ -6,7 +6,7 @@
     <PackageId>Moka.Blazor.Json</PackageId>
     <Description>A high-performance, zero-dependency Blazor JSON viewer and editor component with virtualization, theming, and streaming support.</Description>
     <PackageTags>blazor;json;viewer;editor;component;razor;tree;virtualization</PackageTags>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
     <!-- CA2007: ConfigureAwait not needed in Blazor (sync context).
          CA1848/CA1873: LoggerMessage perf - acceptable for debug logging.
          CA1721: Json property vs GetJson method is intentional.

@@ -6,7 +6,7 @@
     <PackageId>Moka.Blazor.Json.Abstractions</PackageId>
     <Description>Interfaces and abstractions for Moka.Blazor.Json component library.</Description>
     <PackageTags>blazor;json;viewer;abstractions</PackageTags>
-    <Version>0.1.0</Version>
+    <Version>0.1.1</Version>
   </PropertyGroup>
 
   <!-- net9.0 (default versions from Directory.Packages.props) -->
