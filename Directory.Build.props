@@ -6,28 +6,8 @@
 		<TreatWarningsAsErrors>true</TreatWarningsAsErrors>
 		<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
 		<AnalysisLevel>latest-All</AnalysisLevel>
+		<!-- CA2007: ConfigureAwait not needed in Blazor (sync context).
+		     CA1307: String operations on ASCII content — no culture needed. -->
+		<NoWarn>CA2007;CA1307</NoWarn>
 	</PropertyGroup>
-
-	<!-- NuGet package metadata shared by all packable projects -->
-	<PropertyGroup Condition="'$(IsPackable)' == 'true'">
-		<Authors>Moka;BCat;jacobwi</Authors>
-		<Copyright>Copyright (c) Moka 2026</Copyright>
-		<Description>A high-performance Blazor JSON viewer and editor component with virtualized rendering, search, theming, and plugin support.</Description>
-		<PackageTags>blazor;json;viewer;editor;component;blazor-component;json-viewer;json-editor</PackageTags>
-		<PackageLicenseExpression>MIT</PackageLicenseExpression>
-		<PackageProjectUrl>https://github.com/jacobwi/Moka.Blazor.Json</PackageProjectUrl>
-		<RepositoryUrl>https://github.com/jacobwi/Moka.Blazor.Json</RepositoryUrl>
-		<RepositoryType>git</RepositoryType>
-		<PackageReadmeFile>README.md</PackageReadmeFile>
-		<IncludeSymbols>true</IncludeSymbols>
-		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
-		<PackageIcon>icon.png</PackageIcon>
-		<GenerateDocumentationFile>true</GenerateDocumentationFile>
-	</PropertyGroup>
-
-	<!-- Include README.md and icon in NuGet packages -->
-	<ItemGroup Condition="'$(IsPackable)' == 'true'">
-		<None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
-		<None Include="$(MSBuildThisFileDirectory)icon.png" Pack="true" PackagePath="\" />
-	</ItemGroup>
 </Project>

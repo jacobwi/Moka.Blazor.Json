@@ -9,107 +9,126 @@ namespace Moka.Blazor.Json.Components;
 /// </summary>
 public sealed partial class MokaJsonBreadcrumb : ComponentBase
 {
-    #region Private Methods
+	#region Private Methods
 
-    private static bool NeedsQuoting(string propertyName)
-    {
-        if (propertyName.Length == 0) return true;
-        foreach (var c in propertyName)
-            if (c is '.' or ' ' or '[' or ']' or '"' or '\'' or '/')
-                return true;
-        return false;
-    }
+	private static bool NeedsQuoting(string propertyName)
+	{
+		if (propertyName.Length == 0)
+		{
+			return true;
+		}
 
-    #endregion
+		foreach (char c in propertyName)
+		{
+			if (c is '.' or ' ' or '[' or ']' or '"' or '\'' or '/')
+			{
+				return true;
+			}
+		}
 
-    #region Nested Types
+		return false;
+	}
 
-    private sealed class BreadcrumbSegment
-    {
-        public required string Label { get; init; }
-        public required string DisplayLabel { get; init; }
-        public required string Path { get; init; }
-        public string? TypeIcon { get; init; }
-    }
+	#endregion
 
-    #endregion
+	#region Nested Types
 
-    #region Parameters
+	private sealed class BreadcrumbSegment
+	{
+		public required string Label { get; init; }
+		public required string DisplayLabel { get; init; }
+		public required string Path { get; init; }
+		public string? TypeIcon { get; init; }
+	}
 
-    /// <summary>The currently selected JSON Pointer path.</summary>
-    [Parameter]
-    public string? Path { get; set; }
+	#endregion
 
-    /// <summary>The root element's value kind for type icon display.</summary>
-    [Parameter]
-    public JsonValueKind RootValueKind { get; set; }
+	#region Parameters
 
-    /// <summary>Callback when a breadcrumb segment is clicked.</summary>
-    [Parameter]
-    public EventCallback<string> OnNavigate { get; set; }
+	/// <summary>The currently selected JSON Pointer path.</summary>
+	[Parameter]
+	public string? Path { get; set; }
 
-    #endregion
+	/// <summary>The root element's value kind for type icon display.</summary>
+	[Parameter]
+	public JsonValueKind RootValueKind { get; set; }
 
-    #region State Fields
+	/// <summary>Callback when a breadcrumb segment is clicked.</summary>
+	[Parameter]
+	public EventCallback<string> OnNavigate { get; set; }
 
-    private string? _cachedPath;
-    private List<BreadcrumbSegment> _cachedSegments = [];
+	#endregion
 
-    #endregion
+	#region State Fields
 
-    #region Computed Properties
+	private string? _cachedPath;
+	private List<BreadcrumbSegment> _cachedSegments = [];
 
-    private string RootTypeIcon => RootValueKind switch
-    {
-        JsonValueKind.Object => "{}",
-        JsonValueKind.Array => "[]",
-        _ => ""
-    };
+	#endregion
 
-    private List<BreadcrumbSegment> Segments
-    {
-        get
-        {
-            if (Path == _cachedPath) return _cachedSegments;
-            _cachedPath = Path;
+	#region Computed Properties
 
-            if (string.IsNullOrEmpty(Path))
-            {
-                _cachedSegments = [];
-                return _cachedSegments;
-            }
+	private string RootTypeIcon => RootValueKind switch
+	{
+		JsonValueKind.Object => "{}",
+		JsonValueKind.Array => "[]",
+		_ => ""
+	};
 
-            var parts = Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-            var segments = new List<BreadcrumbSegment>(parts.Length);
-            var sb = new StringBuilder(Path.Length);
+	private List<BreadcrumbSegment> Segments
+	{
+		get
+		{
+			if (Path == _cachedPath)
+			{
+				return _cachedSegments;
+			}
 
-            foreach (var part in parts)
-            {
-                var unescaped = part.Replace("~1", "/").Replace("~0", "~");
-                sb.Append('/');
-                sb.Append(part);
+			_cachedPath = Path;
 
-                string displayLabel;
-                if (int.TryParse(unescaped, out var index))
-                    displayLabel = $"[{index}]";
-                else if (NeedsQuoting(unescaped))
-                    displayLabel = $"[\"{unescaped}\"]";
-                else
-                    displayLabel = unescaped;
+			if (string.IsNullOrEmpty(Path))
+			{
+				_cachedSegments = [];
+				return _cachedSegments;
+			}
 
-                segments.Add(new BreadcrumbSegment
-                {
-                    Label = unescaped,
-                    DisplayLabel = displayLabel,
-                    Path = sb.ToString(),
-                    TypeIcon = null
-                });
-            }
+			string[] parts = Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+			var segments = new List<BreadcrumbSegment>(parts.Length);
+			var sb = new StringBuilder(Path.Length);
 
-            _cachedSegments = segments;
-            return _cachedSegments;
-        }
-    }
+			foreach (string part in parts)
+			{
+				string unescaped = part.Replace("~1", "/").Replace("~0", "~");
+				sb.Append('/');
+				sb.Append(part);
 
-    #endregion
+				string displayLabel;
+				if (int.TryParse(unescaped, out int index))
+				{
+					displayLabel = $"[{index}]";
+				}
+				else if (NeedsQuoting(unescaped))
+				{
+					displayLabel = $"[\"{unescaped}\"]";
+				}
+				else
+				{
+					displayLabel = unescaped;
+				}
+
+				segments.Add(new BreadcrumbSegment
+				{
+					Label = unescaped,
+					DisplayLabel = displayLabel,
+					Path = sb.ToString(),
+					TypeIcon = null
+				});
+			}
+
+			_cachedSegments = segments;
+			return _cachedSegments;
+		}
+	}
+
+	#endregion
 }

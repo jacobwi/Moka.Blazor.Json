@@ -1,45 +1,33 @@
-<Project Sdk="Microsoft.NET.Sdk.Razor">
+﻿<Project Sdk="Microsoft.NET.Sdk.Razor">
 
-  <PropertyGroup>
-    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
-    <IsPackable>true</IsPackable>
-    <PackageId>Moka.Blazor.Json</PackageId>
-    <Description>A high-performance, zero-dependency Blazor JSON viewer and editor component with virtualization, theming, and streaming support.</Description>
-    <PackageTags>blazor;json;viewer;editor;component;razor;tree;virtualization</PackageTags>
-    <Version>0.1.1</Version>
-    <!-- CA2007: ConfigureAwait not needed in Blazor (sync context).
-         CA1848/CA1873: LoggerMessage perf - acceptable for debug logging.
+	<PropertyGroup>
+		<TargetFrameworks>net9.0;net10.0</TargetFrameworks>
+		<IsPackable>true</IsPackable>
+		<PackageId>Moka.Blazor.Json</PackageId>
+		<Description>A high-performance, zero-dependency Blazor JSON viewer and editor component with virtualization, theming, and streaming support.</Description>
+		<PackageTags>blazor;json;viewer;editor;component;razor;tree;virtualization</PackageTags>
+		<!-- CA1848/CA1873: LoggerMessage perf - acceptable for debug logging.
          CA1721: Json property vs GetJson method is intentional.
-         CA1307: String.Replace on ASCII JSON Pointer escapes - no culture needed.
          CA2227/CA1002: Blazor [Parameter] properties require public setters / List types.
          CA1812: Internal classes instantiated via DI container.
          CA1822: Event handler methods referenced from Razor cannot be static. -->
-    <NoWarn>CA2007;CA1848;CA1873;CA1721;CA1307;CA2227;CA1002;CA1812;CA1822</NoWarn>
-  </PropertyGroup>
+		<NoWarn>$(NoWarn);CA1848;CA1873;CA1721;CA2227;CA1002;CA1812;CA1822</NoWarn>
+	</PropertyGroup>
 
-  <!-- net9.0 (default versions from Directory.Packages.props) -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
-    <PackageReference Include="Microsoft.AspNetCore.Components.Web" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
-    <PackageReference Include="Microsoft.Extensions.Options" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
-  </ItemGroup>
+	<ItemGroup>
+		<PackageReference Include="Microsoft.AspNetCore.Components.Web" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" />
+		<PackageReference Include="Microsoft.Extensions.Options" />
+		<PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+	</ItemGroup>
 
-<!-- net10.0 -->
-  <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <PackageReference Include="Microsoft.AspNetCore.Components.Web" VersionOverride="10.0.5" />
-    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" VersionOverride="10.0.5" />
-    <PackageReference Include="Microsoft.Extensions.Options" VersionOverride="10.0.5" />
-    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" VersionOverride="10.0.5" />
-  </ItemGroup>
+	<ItemGroup>
+		<ProjectReference Include="..\Moka.Blazor.Json.Abstractions\Moka.Blazor.Json.Abstractions.csproj" />
+	</ItemGroup>
 
-  <ItemGroup>
-    <ProjectReference Include="..\Moka.Blazor.Json.Abstractions\Moka.Blazor.Json.Abstractions.csproj" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <InternalsVisibleTo Include="Moka.Blazor.Json.Tests" />
-    <InternalsVisibleTo Include="Moka.Blazor.Json.Benchmarks" />
-  </ItemGroup>
+	<ItemGroup>
+		<InternalsVisibleTo Include="Moka.Blazor.Json.Tests" />
+		<InternalsVisibleTo Include="Moka.Blazor.Json.Benchmarks" />
+	</ItemGroup>
 
 </Project>

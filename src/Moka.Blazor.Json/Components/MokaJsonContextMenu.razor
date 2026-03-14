@@ -2,29 +2,29 @@
 
 @if (IsVisible)
 {
-    <div class="moka-json-context-menu" id="@MenuId" style="@MenuStyle">
-        @foreach (var action in VisibleActions)
-        {
-            @if (action.HasSeparatorBefore)
-            {
-                <div class="moka-json-context-separator"></div>
-            }
+	<div class="moka-json-context-menu" id="@MenuId" style="@MenuStyle">
+		@foreach (var action in VisibleActions)
+		{
+			@if (action.HasSeparatorBefore)
+			{
+				<div class="moka-json-context-separator"></div>
+			}
 
-            var isEnabled = action.IsEnabled?.Invoke(NodeContext!) ?? true;
-            <div class="@GetItemClass(isEnabled)"
-                 @onclick="() => HandleAction(action, isEnabled)">
-                <span class="moka-json-context-item-label">
-                    @if (action.IconCss is not null)
-                    {
-                        <span class="@action.IconCss"></span>
-                    }
-                    @action.Label
-                </span>
-                @if (action.ShortcutHint is not null)
-                {
-                    <span class="moka-json-context-item-shortcut">@action.ShortcutHint</span>
-                }
-            </div>
-        }
-    </div>
+			var isEnabled = action.IsEnabled?.Invoke(NodeContext!) ?? true;
+			<div class="@GetItemClass(isEnabled)"
+			     @onclick="() => HandleAction(action, isEnabled)">
+				<span class="moka-json-context-item-label">
+					@if (action.IconCss is not null)
+					{
+						<span class="@action.IconCss"></span>
+					}
+					@action.Label
+				</span>
+				@if (action.ShortcutHint is not null)
+				{
+					<span class="moka-json-context-item-shortcut">@action.ShortcutHint</span>
+				}
+			</div>
+		}
+	</div>
 }

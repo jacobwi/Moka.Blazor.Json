@@ -4,74 +4,74 @@
      data-moka-json-theme="@ThemeAttribute"
      @onkeydown="HandleKeyDown">
 
-    <link href="_content/Moka.Blazor.Json/css/moka-json.css" rel="stylesheet"/>
+	<link href="_content/Moka.Blazor.Json/css/moka-json.css" rel="stylesheet"/>
 
-    @if (_errorMessage is not null)
-    {
-        <div class="moka-json-error">
-            <span class="moka-json-error-title">Error</span>
-            <span class="moka-json-error-details">@_errorMessage</span>
-        </div>
-    }
-    else if (!_isLoaded)
-    {
-        <div class="moka-json-loading">Loading...</div>
-    }
-    else
-    {
-        @if (ShowToolbar)
-        {
-            <MokaJsonToolbar OnSearchToggle="ToggleSearch"
-                             OnExpandAll="HandleExpandAll"
-                             OnCollapseAll="HandleCollapseAll"
-                             OnFormatToggle="HandleFormatToggle"
-                             OnCopyAll="HandleCopyAll"
-                             IsFormatted="_isFormatted"
-                             ToolbarExtra="ToolbarExtra"/>
-        }
+	@if (_errorMessage is not null)
+	{
+		<div class="moka-json-error">
+			<span class="moka-json-error-title">Error</span>
+			<span class="moka-json-error-details">@_errorMessage</span>
+		</div>
+	}
+	else if (!_isLoaded)
+	{
+		<div class="moka-json-loading">Loading...</div>
+	}
+	else
+	{
+		@if (ShowToolbar)
+		{
+			<MokaJsonToolbar OnSearchToggle="ToggleSearch"
+			                 OnExpandAll="HandleExpandAll"
+			                 OnCollapseAll="HandleCollapseAll"
+			                 OnFormatToggle="HandleFormatToggle"
+			                 OnCopyAll="HandleCopyAll"
+			                 IsFormatted="_isFormatted"
+			                 ToolbarExtra="ToolbarExtra"/>
+		}
 
-        @if (_showSearch)
-        {
-            <MokaJsonSearchOverlay Query="@_searchQuery"
-                                   MatchCount="@_searchEngine.MatchCount"
-                                   ActiveMatchIndex="@_searchEngine.ActiveMatchIndex"
-                                   CaseSensitive="@_searchCaseSensitive"
-                                   UseRegex="@_searchUseRegex"
-                                   OnQueryChanged="HandleSearchQueryChanged"
-                                   OnNext="HandleSearchNext"
-                                   OnPrevious="HandleSearchPrevious"
-                                   OnClose="ToggleSearch"
-                                   OnCaseSensitiveChanged="HandleCaseSensitiveChanged"
-                                   OnRegexChanged="HandleRegexChanged"/>
-        }
+		@if (_showSearch)
+		{
+			<MokaJsonSearchOverlay Query="@_searchQuery"
+			                       MatchCount="@_searchEngine.MatchCount"
+			                       ActiveMatchIndex="@_searchEngine.ActiveMatchIndex"
+			                       CaseSensitive="@_searchCaseSensitive"
+			                       UseRegex="@_searchUseRegex"
+			                       OnQueryChanged="HandleSearchQueryChanged"
+			                       OnNext="HandleSearchNext"
+			                       OnPrevious="HandleSearchPrevious"
+			                       OnClose="ToggleSearch"
+			                       OnCaseSensitiveChanged="HandleCaseSensitiveChanged"
+			                       OnRegexChanged="HandleRegexChanged"/>
+		}
 
-        @if (ShowBreadcrumb && (SelectedPath is not null || _scopedPath is not null) && _documentManager is not null)
-        {
-            <MokaJsonBreadcrumb Path="@(SelectedPath ?? _scopedPath)"
-                                RootValueKind="@_documentManager.RootElement.ValueKind"
-                                OnNavigate="HandleBreadcrumbNavigate"/>
-        }
+		@if (ShowBreadcrumb && (SelectedPath is not null || _scopedPath is not null) && _documentManager is not null)
+		{
+			<MokaJsonBreadcrumb Path="@(SelectedPath ?? _scopedPath)"
+			                    RootValueKind="@_documentManager.RootElement.ValueKind"
+			                    OnNavigate="HandleBreadcrumbNavigate"/>
+		}
 
-        <MokaJsonTreeViewport Nodes="@_flatNodes"
-                              SelectedPath="@SelectedPath"
-                              ShowLineNumbers="ShowLineNumbers"
-                              OnToggle="HandleToggle"
-                              OnSelect="HandleSelect"
-                              OnContextMenu="HandleContextMenuRequest"
-                              OnDoubleClick="HandleDoubleClick"/>
+		<MokaJsonTreeViewport Nodes="@_flatNodes"
+		                      SelectedPath="@SelectedPath"
+		                      ShowLineNumbers="ShowLineNumbers"
+		                      OnToggle="HandleToggle"
+		                      OnSelect="HandleSelect"
+		                      OnContextMenu="HandleContextMenuRequest"
+		                      OnDoubleClick="HandleDoubleClick"/>
 
-        @if (ShowBottomBar)
-        {
-            <MokaJsonBottomBar DocumentSize="@_documentSize"
-                               NodeCount="@_nodeCount"
-                               CurrentDepth="@_selectedDepth"
-                               MaxDepth="@_maxDepth"
-                               ParseTimeMs="@_parseTimeMs"
-                               SelectedPath="@SelectedPath"
-                               IsValid="@_isValid"
-                               ValidationError="@_validationError"/>
-        }
-    }
+		@if (ShowBottomBar)
+		{
+			<MokaJsonBottomBar DocumentSize="@_documentSize"
+			                   NodeCount="@_nodeCount"
+			                   CurrentDepth="@_selectedDepth"
+			                   MaxDepth="@_maxDepth"
+			                   ParseTimeMs="@_parseTimeMs"
+			                   SelectedPath="@SelectedPath"
+			                   IsValid="@_isValid"
+			                   ValidationError="@_validationError"/>
+		}
+	}
 </div>
 
 @* Render context menu OUTSIDE the viewer div so overflow:hidden doesn't clip it *@

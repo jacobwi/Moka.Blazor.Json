@@ -1,0 +1,23 @@
+<Project>
+	<!-- NuGet package metadata shared by all packable projects (evaluated AFTER csproj so IsPackable is available) -->
+	<PropertyGroup Condition="'$(IsPackable)' == 'true'">
+		<Version>0.1.2</Version>
+		<Authors>jacobwi, BCat, Moka</Authors>
+		<Copyright>Copyright (c) Moka 2026</Copyright>
+		<PackageLicenseExpression>MIT</PackageLicenseExpression>
+		<PackageProjectUrl>https://github.com/jacobwi/Moka.Blazor.Json</PackageProjectUrl>
+		<RepositoryUrl>https://github.com/jacobwi/Moka.Blazor.Json</RepositoryUrl>
+		<RepositoryType>git</RepositoryType>
+		<PackageReadmeFile>README.md</PackageReadmeFile>
+		<PackageIcon>icon.png</PackageIcon>
+		<IncludeSymbols>true</IncludeSymbols>
+		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
+		<GenerateDocumentationFile>true</GenerateDocumentationFile>
+	</PropertyGroup>
+
+	<!-- Include README.md and icon in NuGet packages -->
+	<ItemGroup Condition="'$(IsPackable)' == 'true'">
+		<None Include="$(MSBuildThisFileDirectory)README.md" Pack="true" PackagePath="\" />
+		<None Include="$(MSBuildThisFileDirectory)icon.png" Pack="true" PackagePath="\" />
+	</ItemGroup>
+</Project>

@@ -12,126 +12,128 @@ namespace Moka.Blazor.Json.Components;
 /// </summary>
 public sealed partial class MokaJsonContextMenu : ComponentBase, IAsyncDisposable
 {
-    #region Injected Services
+	#region Injected Services
 
-    [Inject] private MokaJsonInterop Interop { get; set; } = null!;
+	[Inject] private MokaJsonInterop Interop { get; set; } = null!;
 
-    #endregion
+	#endregion
 
-    #region IAsyncDisposable
+	#region IAsyncDisposable
 
-    /// <inheritdoc />
-    public async ValueTask DisposeAsync()
-    {
-        await RemoveDismissListenerAsync();
-        _selfRef?.Dispose();
-    }
+	/// <inheritdoc />
+	public async ValueTask DisposeAsync()
+	{
+		await RemoveDismissListenerAsync();
+		_selfRef?.Dispose();
+	}
 
-    #endregion
+	#endregion
 
-    #region Parameters
+	#region Parameters
 
-    /// <summary>The list of available context actions.</summary>
-    [Parameter]
-    public IReadOnlyList<MokaJsonContextAction>? Actions { get; set; }
+	/// <summary>The list of available context actions.</summary>
+	[Parameter]
+	public IReadOnlyList<MokaJsonContextAction>? Actions { get; set; }
 
-    /// <summary>Whether the context menu is currently visible.</summary>
-    [Parameter]
-    public bool IsVisible { get; set; }
+	/// <summary>Whether the context menu is currently visible.</summary>
+	[Parameter]
+	public bool IsVisible { get; set; }
 
-    /// <summary>The context of the node on which the menu was invoked.</summary>
-    [Parameter]
-    public MokaJsonNodeContext? NodeContext { get; set; }
+	/// <summary>The context of the node on which the menu was invoked.</summary>
+	[Parameter]
+	public MokaJsonNodeContext? NodeContext { get; set; }
 
-    /// <summary>Callback when the context menu should be dismissed.</summary>
-    [Parameter]
-    public EventCallback OnDismiss { get; set; }
+	/// <summary>Callback when the context menu should be dismissed.</summary>
+	[Parameter]
+	public EventCallback OnDismiss { get; set; }
 
-    #endregion
+	#endregion
 
-    #region State Fields
+	#region State Fields
 
-    private string MenuId { get; } = $"moka-ctx-{Guid.NewGuid():N}";
-    private double _left;
-    private double _top;
-    private int _dismissListenerId;
-    private DotNetObjectReference<MokaJsonContextMenu>? _selfRef;
+	private string MenuId { get; } = $"moka-ctx-{Guid.NewGuid():N}";
+	private double _left;
+	private double _top;
+	private int _dismissListenerId;
+	private DotNetObjectReference<MokaJsonContextMenu>? _selfRef;
 
-    #endregion
+	#endregion
 
-    #region Computed Properties
+	#region Computed Properties
 
-    private string MenuStyle => string.Create(CultureInfo.InvariantCulture,
-        $"left:{_left}px;top:{_top}px;display:block;");
+	private string MenuStyle => string.Create(CultureInfo.InvariantCulture,
+		$"left:{_left}px;top:{_top}px;display:block;");
 
-    private IEnumerable<MokaJsonContextAction> VisibleActions =>
-        (Actions ?? [])
-        .Where(a => a.IsVisible?.Invoke(NodeContext!) ?? true)
-        .OrderBy(a => a.Order);
+	private IEnumerable<MokaJsonContextAction> VisibleActions =>
+		(Actions ?? [])
+		.Where(a => a.IsVisible?.Invoke(NodeContext!) ?? true)
+		.OrderBy(a => a.Order);
 
-    #endregion
+	#endregion
 
-    #region Public API
+	#region Public API
 
-    /// <summary>
-    ///     Shows the context menu at the given viewport coordinates.
-    /// </summary>
-    public async Task ShowAsync(double clientX, double clientY)
-    {
-        // Clean up previous dismiss listener if any
-        await RemoveDismissListenerAsync();
+	/// <summary>
+	///     Shows the context menu at the given viewport coordinates.
+	/// </summary>
+	public async Task ShowAsync(double clientX, double clientY)
+	{
+		// Clean up previous dismiss listener if any
+		await RemoveDismissListenerAsync();
 
-        _left = clientX;
-        _top = clientY;
-        StateHasChanged();
+		_left = clientX;
+		_top = clientY;
+		StateHasChanged();
 
-        // Register a dismiss listener for clicks outside
-        _selfRef ??= DotNetObjectReference.Create(this);
-        _dismissListenerId = await Interop.AddContextMenuDismissListenerAsync(_selfRef, MenuId);
-    }
+		// Register a dismiss listener for clicks outside
+		_selfRef ??= DotNetObjectReference.Create(this);
+		_dismissListenerId = await Interop.AddContextMenuDismissListenerAsync(_selfRef, MenuId);
+	}
 
-    /// <summary>
-    ///     Called from JS when a click outside the menu occurs.
-    /// </summary>
-    [JSInvokable]
-    public async Task DismissContextMenu()
-    {
-        await RemoveDismissListenerAsync();
-        await OnDismiss.InvokeAsync();
-    }
+	/// <summary>
+	///     Called from JS when a click outside the menu occurs.
+	/// </summary>
+	[JSInvokable]
+	public async Task DismissContextMenu()
+	{
+		await RemoveDismissListenerAsync();
+		await OnDismiss.InvokeAsync();
+	}
 
-    #endregion
+	#endregion
 
-    #region Private Methods
+	#region Private Methods
 
-    private static string GetItemClass(bool isEnabled)
-    {
-        return isEnabled ? "moka-json-context-item" : "moka-json-context-item moka-json-context-item--disabled";
-    }
+	private static string GetItemClass(bool isEnabled) =>
+		isEnabled ? "moka-json-context-item" : "moka-json-context-item moka-json-context-item--disabled";
 
-    private async Task HandleAction(MokaJsonContextAction action, bool isEnabled)
-    {
-        if (!isEnabled || NodeContext is null) return;
-        await action.OnExecute(NodeContext);
-        await RemoveDismissListenerAsync();
-        await OnDismiss.InvokeAsync();
-    }
+	private async Task HandleAction(MokaJsonContextAction action, bool isEnabled)
+	{
+		if (!isEnabled || NodeContext is null)
+		{
+			return;
+		}
 
-    private async Task RemoveDismissListenerAsync()
-    {
-        if (_dismissListenerId != 0)
-        {
-            try
-            {
-                await Interop.RemoveContextMenuDismissListenerAsync(_dismissListenerId);
-            }
-            catch (JSDisconnectedException)
-            {
-            }
+		await action.OnExecute(NodeContext);
+		await RemoveDismissListenerAsync();
+		await OnDismiss.InvokeAsync();
+	}
 
-            _dismissListenerId = 0;
-        }
-    }
+	private async Task RemoveDismissListenerAsync()
+	{
+		if (_dismissListenerId != 0)
+		{
+			try
+			{
+				await Interop.RemoveContextMenuDismissListenerAsync(_dismissListenerId);
+			}
+			catch (JSDisconnectedException)
+			{
+			}
 
-    #endregion
+			_dismissListenerId = 0;
+		}
+	}
+
+	#endregion
 }

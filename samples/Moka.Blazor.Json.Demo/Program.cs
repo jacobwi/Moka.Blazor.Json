@@ -1,24 +1,24 @@
 using Moka.Blazor.Json.Demo.Components;
 using Moka.Blazor.Json.Extensions;
 
-var builder = WebApplication.CreateBuilder(args);
+WebApplicationBuilder builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddRazorComponents()
-    .AddInteractiveServerComponents();
+	.AddInteractiveServerComponents();
 
 builder.Services.AddMokaJsonViewer(options =>
 {
-    options.DefaultExpandDepth = 2;
-    options.EnableEditMode = true;
-    options.MaxDocumentSizeBytes = 1024L * 1024 * 1024; // 1 GB for stress testing
+	options.DefaultExpandDepth = 2;
+	options.EnableEditMode = true;
+	options.MaxDocumentSizeBytes = 1024L * 1024 * 1024; // 1 GB for stress testing
 });
 
-var app = builder.Build();
+WebApplication app = builder.Build();
 
 if (!app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Error");
-    app.UseHsts();
+	app.UseExceptionHandler("/Error");
+	app.UseHsts();
 }
 
 app.UseHttpsRedirection();
@@ -26,6 +26,6 @@ app.UseStaticFiles();
 app.UseAntiforgery();
 
 app.MapRazorComponents<App>()
-    .AddInteractiveServerRenderMode();
+	.AddInteractiveServerRenderMode();
 
 app.Run();

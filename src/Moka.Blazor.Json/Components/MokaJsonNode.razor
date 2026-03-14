@@ -8,72 +8,72 @@
      @oncontextmenu:preventDefault="true"
      @ondblclick="HandleDoubleClick">
 
-    @if (ShowLineNumbers)
-    {
-        <span class="moka-json-line-number">@(Node.Id + 1)</span>
-    }
+	@if (ShowLineNumbers)
+	{
+		<span class="moka-json-line-number">@(Node.Id + 1)</span>
+	}
 
-    @* Indentation *@
-    <span class="moka-json-node-indent" style="width: @(Node.Depth * 20)px"></span>
+	@* Indentation *@
+	<span class="moka-json-node-indent" style="width: @(Node.Depth * 20)px"></span>
 
-    @if (Node.IsClosingBracket)
-    {
-        @* Closing bracket row *@
-        <span class="moka-json-node-toggle-placeholder"></span>
-        <span class="moka-json-bracket">@(Node.ValueKind == JsonValueKind.Object ? "}" : "]")</span>
-        @if (Node.HasTrailingComma)
-        {
-            <span class="moka-json-comma">,</span>
-        }
-    }
-    else
-    {
-        @* Toggle button or placeholder *@
-        @if (Node.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
-        {
-            <button class="moka-json-node-toggle"
-                    @onclick="HandleToggle"
-                    @onclick:stopPropagation="true"
-                    title="@(Node.IsExpanded ? "Collapse" : "Expand")">
-                @(Node.IsExpanded ? "\u25BC" : "\u25B6")
-            </button>
-        }
-        else
-        {
-            <span class="moka-json-node-toggle-placeholder"></span>
-        }
+	@if (Node.IsClosingBracket)
+	{
+		@* Closing bracket row *@
+		<span class="moka-json-node-toggle-placeholder"></span>
+		<span class="moka-json-bracket">@(Node.ValueKind == JsonValueKind.Object ? "}" : "]")</span>
+		@if (Node.HasTrailingComma)
+		{
+			<span class="moka-json-comma">,</span>
+		}
+	}
+	else
+	{
+		@* Toggle button or placeholder *@
+		@if (Node.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+		{
+			<button class="moka-json-node-toggle"
+			        @onclick="HandleToggle"
+			        @onclick:stopPropagation="true"
+			        title="@(Node.IsExpanded ? "Collapse" : "Expand")">
+				@(Node.IsExpanded ? "\u25BC" : "\u25B6")
+			</button>
+		}
+		else
+		{
+			<span class="moka-json-node-toggle-placeholder"></span>
+		}
 
-        @* Property key *@
-        @if (Node.PropertyName is not null)
-        {
-            <span class="moka-json-key">@Node.PropertyName</span>
-        }
-        else if (Node.ArrayIndex >= 0)
-        {
-            <span class="moka-json-key" style="color: var(--moka-json-color-number)">@Node.ArrayIndex</span>
-        }
+		@* Property key *@
+		@if (Node.PropertyName is not null)
+		{
+			<span class="moka-json-key">@Node.PropertyName</span>
+		}
+		else if (Node.ArrayIndex >= 0)
+		{
+			<span class="moka-json-key" style="color: var(--moka-json-color-number)">@Node.ArrayIndex</span>
+		}
 
-        @* Value or container opening *@
-        @if (Node.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
-        {
-            <span class="moka-json-bracket">@(Node.ValueKind == JsonValueKind.Object ? "{" : "[")</span>
-            @if (!Node.IsExpanded)
-            {
-                <span class="moka-json-collapsed-preview">@GetCollapsedPreview()</span>
-                <span class="moka-json-bracket">@(Node.ValueKind == JsonValueKind.Object ? "}" : "]")</span>
-                @if (Node.HasTrailingComma)
-                {
-                    <span class="moka-json-comma">,</span>
-                }
-            }
-        }
-        else
-        {
-            <span class="@ValueCssClass">@(Node.RawValue ?? "null")</span>
-            @if (Node.HasTrailingComma)
-            {
-                <span class="moka-json-comma">,</span>
-            }
-        }
-    }
+		@* Value or container opening *@
+		@if (Node.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+		{
+			<span class="moka-json-bracket">@(Node.ValueKind == JsonValueKind.Object ? "{" : "[")</span>
+			@if (!Node.IsExpanded)
+			{
+				<span class="moka-json-collapsed-preview">@GetCollapsedPreview()</span>
+				<span class="moka-json-bracket">@(Node.ValueKind == JsonValueKind.Object ? "}" : "]")</span>
+				@if (Node.HasTrailingComma)
+				{
+					<span class="moka-json-comma">,</span>
+				}
+			}
+		}
+		else
+		{
+			<span class="@ValueCssClass">@(Node.RawValue ?? "null")</span>
+			@if (Node.HasTrailingComma)
+			{
+				<span class="moka-json-comma">,</span>
+			}
+		}
+	}
 </div>

@@ -4,8 +4,8 @@
     <TargetFramework>net9.0</TargetFramework>
     <IsPackable>false</IsPackable>
     <!-- CA1707: Test method naming convention uses underscores.
-         CA1307/CA2007: Not applicable for test code. -->
-    <NoWarn>CA1707;CA1307;CA2007;CA1001</NoWarn>
+         CA1001: Not applicable for test code. -->
+    <NoWarn>$(NoWarn);CA1707;CA1001</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

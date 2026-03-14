@@ -3,8 +3,9 @@
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <RootNamespace>Moka.Blazor.Json.Demo</RootNamespace>
+    <IsPackable>false</IsPackable>
     <!-- CA5394: Random is fine for demo data generation, not security-sensitive. -->
-    <NoWarn>CA5394;CA1515;CA1305;CA1849</NoWarn>
+    <NoWarn>$(NoWarn);CA5394;CA1515;CA1305;CA1849</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

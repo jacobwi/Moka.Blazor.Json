@@ -53,42 +53,42 @@
 <MokaJsonViewer Json="@_contextMenuDemoJson" Height="500px" ContextMenuActions="@_customContextActions"/>
 @if (_lastActionMessage is not null)
 {
-    <div style="margin-top: 8px; padding: 8px 12px; background: #e8f5e9; border-radius: 4px; font-family: monospace; font-size: 13px;">
-        @_lastActionMessage
-    </div>
+	<div style="margin-top: 8px; padding: 8px 12px; background: #e8f5e9; border-radius: 4px; font-family: monospace; font-size: 13px;">
+		@_lastActionMessage
+	</div>
 }
 
 <!-- ====== 11. Stress Test ====== -->
 <h2>11. Stress Test — Large JSON</h2>
 <p>
-    Generate a large JSON document to test performance and virtualization.
-    <strong>Warning:</strong> very large sizes will use significant memory.
+	Generate a large JSON document to test performance and virtualization.
+	<strong>Warning:</strong> very large sizes will use significant memory.
 </p>
 <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
-    <label>Target size (MB):</label>
-    <input type="number" @bind="_targetSizeMb" min="1" max="1000" style="width: 100px; padding: 4px 8px;"/>
-    <button @onclick="GenerateStressTest" disabled="@_isGenerating"
-            style="padding: 6px 16px; cursor: pointer;">
-        @if (_isGenerating)
-        {
-            <span>Generating... @_generationProgress</span>
-        }
-        else
-        {
-            <span>Generate</span>
-        }
-    </button>
-    @if (_stressTestStream is not null)
-    {
-        <span style="color: #666; font-size: 12px;">
-            @FormatBytes(_stressTestSize) on disk |
-            @_stressTestNodeCount.ToString("N0") estimated nodes |
-            Generated in @_stressTestGenTime
-        </span>
-    }
+	<label>Target size (MB):</label>
+	<input type="number" @bind="_targetSizeMb" min="1" max="1000" style="width: 100px; padding: 4px 8px;"/>
+	<button @onclick="GenerateStressTest" disabled="@_isGenerating"
+	        style="padding: 6px 16px; cursor: pointer;">
+		@if (_isGenerating)
+		{
+			<span>Generating... @_generationProgress</span>
+		}
+		else
+		{
+			<span>Generate</span>
+		}
+	</button>
+	@if (_stressTestStream is not null)
+	{
+		<span style="color: #666; font-size: 12px;">
+			@FormatBytes(_stressTestSize) on disk |
+			@_stressTestNodeCount.ToString("N0") estimated nodes |
+			Generated in @_stressTestGenTime
+		</span>
+	}
 </div>
 
 @if (_stressTestStream is not null)
 {
-    <MokaJsonViewer JsonStream="@_stressTestStream" Height="600px" MaxDepthExpanded="1" ShowLineNumbers="true"/>
+	<MokaJsonViewer JsonStream="@_stressTestStream" Height="600px" MaxDepthExpanded="1" ShowLineNumbers="true"/>
 }

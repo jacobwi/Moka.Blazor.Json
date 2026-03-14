@@ -1,17 +1,17 @@
 @namespace Moka.Blazor.Json.Components
 
 <div class="moka-json-bottom-bar">
-    <span class="moka-json-bottom-bar-item">@DocumentSize</span>
-    <span class="moka-json-bottom-bar-item">@(NodeCount >= 0 ? $"{NodeCount:N0} nodes" : "computing...")</span>
-    <span class="moka-json-bottom-bar-item">Depth: @CurrentDepth / @(MaxDepth >= 0 ? MaxDepth : "...")</span>
-    <span class="moka-json-bottom-bar-item">Parsed in @ParseTimeMs</span>
+	<span class="moka-json-bottom-bar-item">@DocumentSize</span>
+	<span class="moka-json-bottom-bar-item">@(NodeCount >= 0 ? $"{NodeCount:N0} nodes" : "computing...")</span>
+	<span class="moka-json-bottom-bar-item">Depth: @CurrentDepth / @(MaxDepth >= 0 ? MaxDepth : "...")</span>
+	<span class="moka-json-bottom-bar-item">Parsed in @ParseTimeMs</span>
 
-    @if (SelectedPath is not null)
-    {
-        <span class="moka-json-bottom-bar-item" style="flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis;">
-            @DisplayPath
-        </span>
-    }
+	@if (SelectedPath is not null)
+	{
+		<span class="moka-json-bottom-bar-item" style="flex: 1; text-align: right; overflow: hidden; text-overflow: ellipsis;">
+			@DisplayPath
+		</span>
+	}
 
-    <span class="@ValidationClass">@ValidationText</span>
+	<span class="@ValidationClass">@ValidationText</span>
 </div>

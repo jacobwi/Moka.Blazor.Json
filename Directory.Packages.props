@@ -2,13 +2,23 @@
 	<PropertyGroup>
 		<ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
 	</PropertyGroup>
-	<!-- ASP.NET / Extensions packages — default versions (net9.0) -->
-	<ItemGroup>
-		<PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="9.0.0" />
-		<PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.0" />
-		<PackageVersion Include="Microsoft.Extensions.Options" Version="9.0.0" />
-		<PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.0" />
+
+	<!-- ASP.NET / Extensions packages — net9.0 (default) -->
+	<ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
+		<PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="9.0.14" />
+		<PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.14" />
+		<PackageVersion Include="Microsoft.Extensions.Options" Version="9.0.14" />
+		<PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.14" />
 	</ItemGroup>
+
+	<!-- ASP.NET / Extensions packages — net10.0 -->
+	<ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
+		<PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.5" />
+		<PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.5" />
+		<PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.5" />
+		<PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
+	</ItemGroup>
+
 	<!-- Test dependencies -->
 	<ItemGroup>
 		<PackageVersion Include="bunit" Version="2.6.2" />

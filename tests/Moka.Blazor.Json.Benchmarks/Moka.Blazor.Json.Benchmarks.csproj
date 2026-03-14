@@ -4,7 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <OutputType>Exe</OutputType>
     <IsPackable>false</IsPackable>
-    <NoWarn>CA1707;CA1307;CA2007;CA1515;CA1305</NoWarn>
+    <NoWarn>$(NoWarn);CA1707;CA1515;CA1305</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
