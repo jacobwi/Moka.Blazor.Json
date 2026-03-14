@@ -16,7 +16,7 @@
 
 <!-- net10.0 -->
   <ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-    <PackageReference Include="Microsoft.AspNetCore.Components.Web" VersionOverride="10.0.0-preview.2.25164.1" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.Web" VersionOverride="10.0.5" />
   </ItemGroup>
 
 </Project>
