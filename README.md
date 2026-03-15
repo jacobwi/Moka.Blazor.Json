@@ -53,6 +53,17 @@ builder.Services.AddMokaJsonViewer();
 }
 ```
 
+### 3. Two-way binding
+
+```razor
+<MokaJsonViewer @bind-Json="myJson" />
+
+@code {
+    private string myJson = """{"name":"Alice"}""";
+    // myJson updates automatically when the document is modified
+}
+```
+
 ## Parameters
 
 | Parameter | Type | Default | Description |
@@ -68,7 +79,8 @@ builder.Services.AddMokaJsonViewer();
 | `MaxDepthExpanded` | `int` | `2` | Initial expansion depth |
 | `Height` | `string` | `"400px"` | Component height |
 | `OnNodeSelected` | `EventCallback<JsonNodeSelectedEventArgs>` | | Fires when a node is clicked |
-| `OnJsonChanged` | `EventCallback<JsonChangeEventArgs>` | | Fires when JSON is modified |
+| `OnJsonChanged` | `EventCallback<JsonChangeEventArgs>` | | Fires when JSON is modified (detailed) |
+| `JsonChanged` | `EventCallback<string?>` | | Two-way binding callback for `@bind-Json` |
 | `OnError` | `EventCallback<JsonErrorEventArgs>` | | Fires on parse/runtime errors |
 | `ContextMenuActions` | `IReadOnlyList<MokaJsonContextAction>?` | `null` | Custom context menu actions |
 | `ToolbarExtra` | `RenderFragment?` | `null` | Extra toolbar content |

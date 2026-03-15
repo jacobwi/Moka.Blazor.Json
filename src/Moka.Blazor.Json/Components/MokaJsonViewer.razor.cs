@@ -133,6 +133,12 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	public EventCallback<JsonChangeEventArgs> OnJsonChanged { get; set; }
 
 	/// <summary>
+	///     Two-way binding callback for <see cref="Json" />. Enables <c>@bind-Json</c>.
+	/// </summary>
+	[Parameter]
+	public EventCallback<string?> JsonChanged { get; set; }
+
+	/// <summary>
 	///     Callback when an error occurs.
 	/// </summary>
 	[Parameter]
@@ -760,6 +766,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			_previousJson = newJson;
 			await ReloadFromJsonAsync(newJson);
 
+			await JsonChanged.InvokeAsync(newJson);
 			await OnJsonChanged.InvokeAsync(new JsonChangeEventArgs
 			{
 				FullJson = newJson,
