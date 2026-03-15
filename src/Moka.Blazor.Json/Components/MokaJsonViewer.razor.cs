@@ -151,6 +151,18 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	public IReadOnlyList<MokaJsonContextAction>? ContextMenuActions { get; set; }
 
 	/// <summary>
+	///     Style of expand/collapse toggle indicators. Default is <see cref="MokaJsonToggleStyle.Triangle" />.
+	/// </summary>
+	[Parameter]
+	public MokaJsonToggleStyle ToggleStyle { get; set; } = MokaJsonToggleStyle.Triangle;
+
+	/// <summary>
+	///     Size of expand/collapse toggle indicators. Default is <see cref="MokaJsonToggleSize.Small" />.
+	/// </summary>
+	[Parameter]
+	public MokaJsonToggleSize ToggleSize { get; set; } = MokaJsonToggleSize.Small;
+
+	/// <summary>
 	///     Extra content to render in the toolbar.
 	/// </summary>
 	[Parameter]
@@ -443,6 +455,18 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 		string json = _documentManager.GetJsonString(_isFormatted);
 		await Interop.CopyToClipboardAsync(json);
+	}
+
+	private async Task HandleExport()
+	{
+		if (_documentManager is null)
+		{
+			return;
+		}
+
+		string json = _documentManager.GetJsonString(_isFormatted);
+		string fileName = $"export-{DateTime.Now:yyyyMMdd-HHmmss}.json";
+		await Interop.DownloadFileAsync(fileName, json);
 	}
 
 	#endregion

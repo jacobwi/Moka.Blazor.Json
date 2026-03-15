@@ -19,7 +19,7 @@
 	@if (Node.IsClosingBracket)
 	{
 		@* Closing bracket row *@
-		<span class="moka-json-node-toggle-placeholder"></span>
+		<span class="moka-json-node-toggle-placeholder @ToggleSizeCss"></span>
 		<span class="moka-json-bracket">@(Node.ValueKind == JsonValueKind.Object ? "}" : "]")</span>
 		@if (Node.HasTrailingComma)
 		{
@@ -31,16 +31,16 @@
 		@* Toggle button or placeholder *@
 		@if (Node.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
 		{
-			<button class="moka-json-node-toggle"
+			<button class="moka-json-node-toggle @ToggleSizeCss"
 			        @onclick="HandleToggle"
 			        @onclick:stopPropagation="true"
 			        title="@(Node.IsExpanded ? "Collapse" : "Expand")">
-				@(Node.IsExpanded ? "\u25BC" : "\u25B6")
+				@ToggleChar
 			</button>
 		}
 		else
 		{
-			<span class="moka-json-node-toggle-placeholder"></span>
+			<span class="moka-json-node-toggle-placeholder @ToggleSizeCss"></span>
 		}
 
 		@* Property key *@

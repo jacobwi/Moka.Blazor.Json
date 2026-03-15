@@ -54,6 +54,18 @@ public sealed partial class MokaJsonNode : ComponentBase
 	[Parameter]
 	public bool ShowLineNumbers { get; set; }
 
+	/// <summary>
+	///     Style of expand/collapse toggle indicators.
+	/// </summary>
+	[Parameter]
+	public MokaJsonToggleStyle ToggleStyle { get; set; }
+
+	/// <summary>
+	///     Size of expand/collapse toggle indicators.
+	/// </summary>
+	[Parameter]
+	public MokaJsonToggleSize ToggleSize { get; set; }
+
 	#endregion
 
 	#region Computed Properties
@@ -104,6 +116,27 @@ public sealed partial class MokaJsonNode : ComponentBase
 		return $" {Node.ChildCount} {itemWord} ";
 	}
 
+	private string ToggleChar => (ToggleStyle, Node.IsExpanded) switch
+	{
+		(MokaJsonToggleStyle.Triangle, true) => "\u25BC", // ▼
+		(MokaJsonToggleStyle.Triangle, false) => "\u25B6", // ▶
+		(MokaJsonToggleStyle.Chevron, true) => "\u2304", // ⌄
+		(MokaJsonToggleStyle.Chevron, false) => "\u203A", // ›
+		(MokaJsonToggleStyle.PlusMinus, true) => "\u2212", // −
+		(MokaJsonToggleStyle.PlusMinus, false) => "+",
+		(MokaJsonToggleStyle.Arrow, true) => "\u25BD", // ▽
+		(MokaJsonToggleStyle.Arrow, false) => "\u25B7", // ▷
+		_ => Node.IsExpanded ? "\u25BC" : "\u25B6"
+	};
+
+	private string ToggleSizeCss => ToggleSize switch
+	{
+		MokaJsonToggleSize.Small => "moka-json-toggle--sm",
+		MokaJsonToggleSize.Medium => "moka-json-toggle--md",
+		MokaJsonToggleSize.Large => "moka-json-toggle--lg",
+		_ => "moka-json-toggle--sm"
+	};
+
 	#endregion
 
 	#region Event Handlers
@@ -147,15 +180,21 @@ public sealed partial class MokaJsonNode : ComponentBase
 	private FlattenedJsonNode _previousNode;
 	private bool _previousIsSelected;
 	private bool _previousShowLineNumbers;
+	private MokaJsonToggleStyle _previousToggleStyle;
+	private MokaJsonToggleSize _previousToggleSize;
 
 	/// <inheritdoc />
 	protected override bool ShouldRender()
 	{
-		if (Node != _previousNode || IsSelected != _previousIsSelected || ShowLineNumbers != _previousShowLineNumbers)
+		if (Node != _previousNode || IsSelected != _previousIsSelected ||
+		    ShowLineNumbers != _previousShowLineNumbers ||
+		    ToggleStyle != _previousToggleStyle || ToggleSize != _previousToggleSize)
 		{
 			_previousNode = Node;
 			_previousIsSelected = IsSelected;
 			_previousShowLineNumbers = ShowLineNumbers;
+			_previousToggleStyle = ToggleStyle;
+			_previousToggleSize = ToggleSize;
 			return true;
 		}
 

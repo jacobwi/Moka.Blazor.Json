@@ -27,6 +27,10 @@ public sealed partial class MokaJsonToolbar : ComponentBase
 	[Parameter]
 	public EventCallback OnCopyAll { get; set; }
 
+	/// <summary>Callback to export/download the JSON as a file.</summary>
+	[Parameter]
+	public EventCallback OnExport { get; set; }
+
 	/// <summary>Whether the JSON is currently formatted (pretty-printed).</summary>
 	[Parameter]
 	public bool IsFormatted { get; set; } = true;

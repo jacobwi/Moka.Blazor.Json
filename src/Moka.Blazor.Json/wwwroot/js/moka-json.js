@@ -164,3 +164,20 @@ export function focusElement(elementId) {
     const el = document.getElementById(elementId);
     if (el) el.focus();
 }
+
+/**
+ * Downloads a string as a file via the browser.
+ * @param {string} fileName - The file name for the download.
+ * @param {string} content - The file content.
+ */
+export function downloadFile(fileName, content) {
+    const blob = new Blob([content], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}

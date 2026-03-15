@@ -51,5 +51,17 @@ public sealed partial class MokaJsonTreeViewport : ComponentBase
 	[Parameter]
 	public bool ShowLineNumbers { get; set; }
 
+	/// <summary>
+	///     Style of expand/collapse toggle indicators.
+	/// </summary>
+	[Parameter]
+	public MokaJsonToggleStyle ToggleStyle { get; set; }
+
+	/// <summary>
+	///     Size of expand/collapse toggle indicators.
+	/// </summary>
+	[Parameter]
+	public MokaJsonToggleSize ToggleSize { get; set; }
+
 	private string ViewportId { get; } = $"moka-viewport-{Guid.NewGuid():N}";
 }

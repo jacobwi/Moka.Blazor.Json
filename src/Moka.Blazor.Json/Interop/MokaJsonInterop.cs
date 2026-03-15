@@ -89,6 +89,16 @@ internal sealed class MokaJsonInterop(IJSRuntime jsRuntime) : IAsyncDisposable
 		await module.InvokeVoidAsync("focusElement", cancellationToken, elementId).ConfigureAwait(false);
 	}
 
+	/// <summary>
+	///     Downloads a string as a file via the browser.
+	/// </summary>
+	public async ValueTask DownloadFileAsync(string fileName, string content,
+		CancellationToken cancellationToken = default)
+	{
+		IJSObjectReference module = await GetModuleAsync().ConfigureAwait(false);
+		await module.InvokeVoidAsync("downloadFile", cancellationToken, fileName, content).ConfigureAwait(false);
+	}
+
 	#endregion
 
 	#region Private Methods

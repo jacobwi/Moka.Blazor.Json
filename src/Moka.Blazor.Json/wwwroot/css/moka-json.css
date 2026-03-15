@@ -261,13 +261,10 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
     cursor: pointer;
     flex-shrink: 0;
     user-select: none;
     color: var(--moka-json-color-text);
-    font-size: 10px;
     opacity: 0.7;
     border: none;
     background: transparent;
@@ -280,8 +277,29 @@
 
 .moka-json-node-toggle-placeholder {
     display: inline-block;
-    width: 16px;
     flex-shrink: 0;
+}
+
+/* Toggle sizes */
+.moka-json-toggle--sm,
+.moka-json-toggle--sm.moka-json-node-toggle-placeholder {
+    width: 14px;
+    height: 14px;
+    font-size: 8px;
+}
+
+.moka-json-toggle--md,
+.moka-json-toggle--md.moka-json-node-toggle-placeholder {
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+}
+
+.moka-json-toggle--lg,
+.moka-json-toggle--lg.moka-json-node-toggle-placeholder {
+    width: 20px;
+    height: 20px;
+    font-size: 13px;
 }
 
 .moka-json-key {

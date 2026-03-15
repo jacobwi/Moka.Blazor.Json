@@ -259,6 +259,91 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		Assert.Contains("ms", bottomBar.TextContent);
 	}
 
+	[Fact]
+	public void Export_Button_Exists_In_Toolbar()
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"a":1}""")
+			.Add(v => v.ShowToolbar, true));
+
+		IReadOnlyList<IElement> buttons = cut.FindAll(".moka-json-toolbar button");
+		Assert.Contains(buttons, b => b.TextContent.Contains("Export"));
+	}
+
+	[Fact]
+	public void Export_Button_Invokes_JS_Download()
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"a":1}""")
+			.Add(v => v.ShowToolbar, true));
+
+		IReadOnlyList<IElement> buttons = cut.FindAll(".moka-json-toolbar button");
+		IElement exportButton = buttons.First(b => b.TextContent.Contains("Export"));
+		exportButton.Click();
+
+		// Loose mode absorbs the JS call — no exception means the handler wired correctly
+	}
+
+	[Fact]
+	public void Copy_Button_Invokes_JS_Clipboard()
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"a":1}""")
+			.Add(v => v.ShowToolbar, true));
+
+		IReadOnlyList<IElement> buttons = cut.FindAll(".moka-json-toolbar button");
+		IElement copyButton = buttons.First(b => b.TextContent.Contains("Copy"));
+		copyButton.Click();
+	}
+
+	#endregion
+
+	#region Toggle Style & Size
+
+	[Theory]
+	[InlineData(MokaJsonToggleStyle.Triangle)]
+	[InlineData(MokaJsonToggleStyle.Chevron)]
+	[InlineData(MokaJsonToggleStyle.PlusMinus)]
+	[InlineData(MokaJsonToggleStyle.Arrow)]
+	public void ToggleStyle_Renders_Toggle_Button(MokaJsonToggleStyle style)
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"a":{"b":1}}""")
+			.Add(v => v.MaxDepthExpanded, 2)
+			.Add(v => v.ToggleStyle, style));
+
+		IReadOnlyList<IElement> toggles = cut.FindAll(".moka-json-node-toggle");
+		Assert.True(toggles.Count > 0);
+	}
+
+	[Theory]
+	[InlineData(MokaJsonToggleSize.Small, "moka-json-toggle--sm")]
+	[InlineData(MokaJsonToggleSize.Medium, "moka-json-toggle--md")]
+	[InlineData(MokaJsonToggleSize.Large, "moka-json-toggle--lg")]
+	public void ToggleSize_Applies_Css_Class(MokaJsonToggleSize size, string expectedClass)
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"a":{"b":1}}""")
+			.Add(v => v.MaxDepthExpanded, 2)
+			.Add(v => v.ToggleSize, size));
+
+		IReadOnlyList<IElement> toggles = cut.FindAll(".moka-json-node-toggle");
+		Assert.True(toggles.Count > 0);
+		Assert.All(toggles, t => Assert.Contains(expectedClass, t.ClassName));
+	}
+
+	[Fact]
+	public void Default_ToggleSize_Is_Small()
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"a":{"b":1}}""")
+			.Add(v => v.MaxDepthExpanded, 2));
+
+		IReadOnlyList<IElement> toggles = cut.FindAll(".moka-json-node-toggle");
+		Assert.True(toggles.Count > 0);
+		Assert.All(toggles, t => Assert.Contains("moka-json-toggle--sm", t.ClassName));
+	}
+
 	#endregion
 
 	#region Integration

@@ -26,6 +26,7 @@
 			                 OnCollapseAll="HandleCollapseAll"
 			                 OnFormatToggle="HandleFormatToggle"
 			                 OnCopyAll="HandleCopyAll"
+			                 OnExport="HandleExport"
 			                 IsFormatted="_isFormatted"
 			                 ToolbarExtra="ToolbarExtra"/>
 		}
@@ -55,6 +56,8 @@
 		<MokaJsonTreeViewport Nodes="@_flatNodes"
 		                      SelectedPath="@SelectedPath"
 		                      ShowLineNumbers="ShowLineNumbers"
+		                      ToggleStyle="ToggleStyle"
+		                      ToggleSize="ToggleSize"
 		                      OnToggle="HandleToggle"
 		                      OnSelect="HandleSelect"
 		                      OnContextMenu="HandleContextMenuRequest"
