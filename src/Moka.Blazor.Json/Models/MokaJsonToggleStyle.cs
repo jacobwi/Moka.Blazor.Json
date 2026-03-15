@@ -32,6 +32,11 @@ public enum MokaJsonToggleStyle
 public enum MokaJsonToggleSize
 {
 	/// <summary>
+	///     Extra-small toggle (6px font, 12px button).
+	/// </summary>
+	ExtraSmall,
+
+	/// <summary>
 	///     Small toggle (8px font, 14px button).
 	/// </summary>
 	Small,
@@ -44,5 +49,10 @@ public enum MokaJsonToggleSize
 	/// <summary>
 	///     Large toggle (13px font, 20px button).
 	/// </summary>
-	Large
+	Large,
+
+	/// <summary>
+	///     Extra-large toggle (16px font, 24px button).
+	/// </summary>
+	ExtraLarge
 }

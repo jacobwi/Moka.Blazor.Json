@@ -58,8 +58,20 @@
 	</div>
 }
 
-<!-- ====== 11. Stress Test ====== -->
-<h2>11. Stress Test — Large JSON</h2>
+<!-- ====== 11. Edit Mode ====== -->
+<h2>11. Edit Mode</h2>
+<p>Double-click any value to edit inline. Right-click for add/delete/rename actions. Ctrl+Z/Y for undo/redo.</p>
+<MokaJsonViewer @bind-Json="_editDemoJson" ReadOnly="false" Height="500px" ShowLineNumbers="true"/>
+@if (_editDemoJson is not null)
+{
+	<details style="margin-top: 8px;">
+		<summary style="cursor: pointer; font-family: monospace; font-size: 13px; color: #666;">Current JSON output</summary>
+		<pre style="margin-top: 4px; padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 12px; max-height: 200px; overflow: auto;">@_editDemoJson</pre>
+	</details>
+}
+
+<!-- ====== 12. Stress Test ====== -->
+<h2>12. Stress Test — Large JSON</h2>
 <p>
 	Generate a large JSON document to test performance and virtualization.
 	<strong>Warning:</strong> very large sizes will use significant memory.

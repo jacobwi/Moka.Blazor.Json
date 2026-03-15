@@ -166,6 +166,21 @@ export function focusElement(elementId) {
 }
 
 /**
+ * Focuses an input element and selects all its text.
+ * @param {string} elementId
+ */
+export function focusAndSelectInput(elementId) {
+    // Use requestAnimationFrame to ensure the element is rendered
+    requestAnimationFrame(() => {
+        const el = document.getElementById(elementId);
+        if (el) {
+            el.focus();
+            if (el.select) el.select();
+        }
+    });
+}
+
+/**
  * Downloads a string as a file via the browser.
  * @param {string} fileName - The file name for the download.
  * @param {string} content - The file content.

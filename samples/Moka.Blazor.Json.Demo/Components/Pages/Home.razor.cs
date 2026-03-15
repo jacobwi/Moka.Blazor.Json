@@ -231,6 +231,29 @@ public sealed partial class Home : ComponentBase
 
 	#endregion
 
+	#region 11. Edit mode demo
+
+	private string? _editDemoJson = """
+	                                {
+	                                  "user": {
+	                                    "name": "Jane Doe",
+	                                    "age": 28,
+	                                    "email": "jane@example.com",
+	                                    "active": true
+	                                  },
+	                                  "settings": {
+	                                    "theme": "dark",
+	                                    "notifications": true,
+	                                    "language": "en"
+	                                  },
+	                                  "tags": ["admin", "beta-tester"],
+	                                  "score": 95.5,
+	                                  "notes": null
+	                                }
+	                                """;
+
+	#endregion
+
 	#region 6. Large array (generated at startup)
 
 	private string _largeArrayJson = "[]";
@@ -640,7 +663,7 @@ public sealed partial class Home : ComponentBase
 
 	#endregion
 
-	#region 11. Stress test state
+	#region 12. Stress test state
 
 	private string _generationProgress = "";
 	private bool _isGenerating;

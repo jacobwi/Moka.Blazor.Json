@@ -63,5 +63,29 @@ public sealed partial class MokaJsonTreeViewport : ComponentBase
 	[Parameter]
 	public MokaJsonToggleSize ToggleSize { get; set; }
 
+	/// <summary>
+	///     Active inline edit state, if any.
+	/// </summary>
+	[Parameter]
+	public InlineEditState? EditState { get; set; }
+
+	/// <summary>
+	///     Callback when an inline edit is committed.
+	/// </summary>
+	[Parameter]
+	public EventCallback<InlineEditResult> OnEditCommit { get; set; }
+
+	/// <summary>
+	///     Callback when an inline edit is cancelled.
+	/// </summary>
+	[Parameter]
+	public EventCallback OnEditCancel { get; set; }
+
+	/// <summary>
+	///     Whether the viewer is in read-only mode.
+	/// </summary>
+	[Parameter]
+	public bool ReadOnly { get; set; }
+
 	private string ViewportId { get; } = $"moka-viewport-{Guid.NewGuid():N}";
 }

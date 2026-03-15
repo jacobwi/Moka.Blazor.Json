@@ -66,11 +66,44 @@ public sealed partial class MokaJsonNode : ComponentBase
 	[Parameter]
 	public MokaJsonToggleSize ToggleSize { get; set; }
 
+	/// <summary>
+	///     Whether the viewer is in read-only mode.
+	/// </summary>
+	[Parameter]
+	public bool ReadOnly { get; set; }
+
+	/// <summary>
+	///     Active inline edit state from the parent viewer.
+	/// </summary>
+	[Parameter]
+	public InlineEditState? EditState { get; set; }
+
+	/// <summary>
+	///     Callback when an inline edit is committed.
+	/// </summary>
+	[Parameter]
+	public EventCallback<InlineEditResult> OnEditCommit { get; set; }
+
+	/// <summary>
+	///     Callback when an inline edit is cancelled.
+	/// </summary>
+	[Parameter]
+	public EventCallback OnEditCancel { get; set; }
+
 	#endregion
 
 	#region Computed Properties
 
 	private string ElementId => $"moka-node-{Node.Id}";
+	private string EditInputId => $"moka-edit-{Node.Id}";
+
+	private bool IsEditingValue => EditState is not null
+	                               && EditState.Path == Node.Path
+	                               && EditState.Target == InlineEditTarget.Value;
+
+	private bool IsEditingKey => EditState is not null
+	                             && EditState.Path == Node.Path
+	                             && EditState.Target == InlineEditTarget.Key;
 
 	private string CssClass
 	{
@@ -90,6 +123,11 @@ public sealed partial class MokaJsonNode : ComponentBase
 			if (Node.IsActiveSearchMatch)
 			{
 				css += " moka-json-node--search-active";
+			}
+
+			if (!ReadOnly && !Node.IsClosingBracket)
+			{
+				css += " moka-json-node--editable";
 			}
 
 			return css;
@@ -131,9 +169,11 @@ public sealed partial class MokaJsonNode : ComponentBase
 
 	private string ToggleSizeCss => ToggleSize switch
 	{
+		MokaJsonToggleSize.ExtraSmall => "moka-json-toggle--xs",
 		MokaJsonToggleSize.Small => "moka-json-toggle--sm",
 		MokaJsonToggleSize.Medium => "moka-json-toggle--md",
 		MokaJsonToggleSize.Large => "moka-json-toggle--lg",
+		MokaJsonToggleSize.ExtraLarge => "moka-json-toggle--xl",
 		_ => "moka-json-toggle--sm"
 	};
 
@@ -173,6 +213,42 @@ public sealed partial class MokaJsonNode : ComponentBase
 		}
 	}
 
+	private void HandleEditInput(ChangeEventArgs e)
+	{
+		if (EditState is not null)
+		{
+			EditState.CurrentValue = e.Value?.ToString() ?? "";
+			EditState.ValidationError = null;
+		}
+	}
+
+	private async Task HandleEditKeyDown(KeyboardEventArgs e)
+	{
+		if (e.Key == "Enter")
+		{
+			await OnEditCommit.InvokeAsync(new InlineEditResult(EditState?.CurrentValue ?? "", true));
+		}
+		else if (e.Key == "Escape")
+		{
+			await OnEditCancel.InvokeAsync();
+		}
+	}
+
+	private async Task HandleEditBlur()
+	{
+		// Commit on blur
+		if (EditState is not null)
+		{
+			await OnEditCommit.InvokeAsync(new InlineEditResult(EditState.CurrentValue, true));
+		}
+	}
+
+	private async Task HandleBoolSelect(ChangeEventArgs e)
+	{
+		string newValue = e.Value?.ToString() ?? "false";
+		await OnEditCommit.InvokeAsync(new InlineEditResult(newValue, true));
+	}
+
 	#endregion
 
 	#region Render Optimization
@@ -182,19 +258,23 @@ public sealed partial class MokaJsonNode : ComponentBase
 	private bool _previousShowLineNumbers;
 	private MokaJsonToggleStyle _previousToggleStyle;
 	private MokaJsonToggleSize _previousToggleSize;
+	private InlineEditState? _previousEditState;
 
 	/// <inheritdoc />
 	protected override bool ShouldRender()
 	{
+		bool editStateChanged = EditState != _previousEditState;
 		if (Node != _previousNode || IsSelected != _previousIsSelected ||
 		    ShowLineNumbers != _previousShowLineNumbers ||
-		    ToggleStyle != _previousToggleStyle || ToggleSize != _previousToggleSize)
+		    ToggleStyle != _previousToggleStyle || ToggleSize != _previousToggleSize ||
+		    editStateChanged)
 		{
 			_previousNode = Node;
 			_previousIsSelected = IsSelected;
 			_previousShowLineNumbers = ShowLineNumbers;
 			_previousToggleStyle = ToggleStyle;
 			_previousToggleSize = ToggleSize;
+			_previousEditState = EditState;
 			return true;
 		}
 

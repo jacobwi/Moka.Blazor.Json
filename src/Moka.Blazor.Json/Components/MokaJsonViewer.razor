@@ -58,10 +58,14 @@
 		                      ShowLineNumbers="ShowLineNumbers"
 		                      ToggleStyle="ToggleStyle"
 		                      ToggleSize="ToggleSize"
+		                      ReadOnly="ReadOnly"
+		                      EditState="@_activeEdit"
 		                      OnToggle="HandleToggle"
 		                      OnSelect="HandleSelect"
 		                      OnContextMenu="HandleContextMenuRequest"
-		                      OnDoubleClick="HandleDoubleClick"/>
+		                      OnDoubleClick="HandleDoubleClick"
+		                      OnEditCommit="HandleEditCommit"
+		                      OnEditCancel="HandleEditCancel"/>
 
 		@if (ShowBottomBar)
 		{

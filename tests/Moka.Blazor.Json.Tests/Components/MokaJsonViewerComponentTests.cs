@@ -346,6 +346,203 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 
 	#endregion
 
+	#region Edit Mode
+
+	[Fact]
+	public void ReadOnly_False_Adds_Editable_Class()
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"name":"Alice"}""")
+			.Add(v => v.ReadOnly, false)
+			.Add(v => v.MaxDepthExpanded, 2));
+
+		IReadOnlyList<IElement> editableNodes = cut.FindAll(".moka-json-node--editable");
+		Assert.True(editableNodes.Count > 0);
+	}
+
+	[Fact]
+	public void ReadOnly_True_Does_Not_Add_Editable_Class()
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"name":"Alice"}""")
+			.Add(v => v.ReadOnly, true)
+			.Add(v => v.MaxDepthExpanded, 2));
+
+		Assert.Empty(cut.FindAll(".moka-json-node--editable"));
+	}
+
+	[Fact]
+	public void DoubleClick_On_Value_Node_Shows_Inline_Edit()
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"name":"Alice"}""")
+			.Add(v => v.ReadOnly, false)
+			.Add(v => v.MaxDepthExpanded, 2));
+
+		// Find the value node (not the root object node or closing bracket)
+		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node--editable");
+		IElement valueNode = nodes.First(n => n.TextContent.Contains("Alice"));
+		valueNode.DoubleClick();
+
+		// Should show inline edit input
+		IReadOnlyList<IElement> inputs = cut.FindAll(".moka-json-inline-edit");
+		Assert.True(inputs.Count > 0);
+	}
+
+	[Fact]
+	public void DoubleClick_On_ReadOnly_Does_Not_Show_Edit()
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"name":"Alice"}""")
+			.Add(v => v.ReadOnly, true)
+			.Add(v => v.MaxDepthExpanded, 2));
+
+		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node");
+		IElement valueNode = nodes.First(n => n.TextContent.Contains("Alice"));
+		valueNode.DoubleClick();
+
+		Assert.Empty(cut.FindAll(".moka-json-inline-edit"));
+	}
+
+	[Fact]
+	public void Edit_Context_Menu_Actions_Visible_When_Not_ReadOnly()
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"name":"Alice"}""")
+			.Add(v => v.ReadOnly, false)
+			.Add(v => v.MaxDepthExpanded, 2));
+
+		// Right-click a value node to open context menu
+		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node--editable");
+		IElement valueNode = nodes.First(n => n.TextContent.Contains("Alice"));
+		valueNode.ContextMenu();
+
+		// Context menu should contain edit-related actions
+		string markup = cut.Markup;
+		Assert.Contains("Edit Value", markup);
+		Assert.Contains("Delete", markup);
+	}
+
+	[Fact]
+	public void Edit_Context_Menu_Actions_Hidden_When_ReadOnly()
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"name":"Alice"}""")
+			.Add(v => v.ReadOnly, true)
+			.Add(v => v.MaxDepthExpanded, 2));
+
+		// Right-click a node
+		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node");
+		IElement valueNode = nodes.First(n => n.TextContent.Contains("Alice"));
+		valueNode.ContextMenu();
+
+		string markup = cut.Markup;
+		Assert.DoesNotContain("Edit Value", markup);
+		Assert.DoesNotContain("Delete", markup);
+	}
+
+	[Fact]
+	public void JsonChanged_Fires_After_Edit_Commit()
+	{
+		string? changedJson = null;
+
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"name":"Alice"}""")
+			.Add(v => v.ReadOnly, false)
+			.Add(v => v.JsonChanged, json => changedJson = json)
+			.Add(v => v.MaxDepthExpanded, 2));
+
+		// Double-click the string value node to enter edit mode
+		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node--editable");
+		IElement valueNode = nodes.First(n => n.TextContent.Contains("Alice"));
+		valueNode.DoubleClick();
+
+		// Find the inline edit input and change its value
+		IElement input = cut.Find(".moka-json-inline-edit");
+		input.Input("Bob");
+		input.KeyDown("Enter");
+
+		Assert.NotNull(changedJson);
+		Assert.Contains("Bob", changedJson);
+	}
+
+	[Fact]
+	public void Bind_Json_Updates_After_Edit()
+	{
+		string? boundJson = """{"count":10}""";
+
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, boundJson)
+			.Add(v => v.ReadOnly, false)
+			.Add(v => v.JsonChanged, json => boundJson = json)
+			.Add(v => v.MaxDepthExpanded, 2));
+
+		// Double-click the number value node
+		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node--editable");
+		IElement valueNode = nodes.First(n => n.TextContent.Contains("10"));
+		valueNode.DoubleClick();
+
+		// Edit the value
+		IElement input = cut.Find(".moka-json-inline-edit");
+		input.Input("99");
+		input.KeyDown("Enter");
+
+		Assert.NotNull(boundJson);
+		Assert.Contains("99", boundJson);
+	}
+
+	[Fact]
+	public void Context_Menu_Delete_Removes_Node()
+	{
+		string? changedJson = null;
+
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"name":"Alice","age":30}""")
+			.Add(v => v.ReadOnly, false)
+			.Add(v => v.JsonChanged, json => changedJson = json)
+			.Add(v => v.MaxDepthExpanded, 2));
+
+		// Right-click the "age" node
+		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node--editable");
+		IElement ageNode = nodes.First(n => n.TextContent.Contains("age") && n.TextContent.Contains("30"));
+		ageNode.ContextMenu();
+
+		// Click Delete
+		IReadOnlyList<IElement> menuItems = cut.FindAll(".moka-json-context-item");
+		IElement deleteItem = menuItems.First(m => m.TextContent.Contains("Delete"));
+		deleteItem.Click();
+
+		Assert.NotNull(changedJson);
+		Assert.DoesNotContain("age", changedJson);
+	}
+
+	[Fact]
+	public void Context_Menu_Add_Property_Adds_To_Object()
+	{
+		string? changedJson = null;
+
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"name":"Alice"}""")
+			.Add(v => v.ReadOnly, false)
+			.Add(v => v.JsonChanged, json => changedJson = json)
+			.Add(v => v.MaxDepthExpanded, 2));
+
+		// Right-click the root object node
+		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node--editable");
+		IElement rootNode = nodes[0];
+		rootNode.ContextMenu();
+
+		// Click "Add Property"
+		IReadOnlyList<IElement> menuItems = cut.FindAll(".moka-json-context-item");
+		IElement addItem = menuItems.First(m => m.TextContent.Contains("Add Property"));
+		addItem.Click();
+
+		Assert.NotNull(changedJson);
+		Assert.Contains("newProperty", changedJson);
+	}
+
+	#endregion
+
 	#region Integration
 
 	[Fact]

@@ -90,6 +90,15 @@ internal sealed class MokaJsonInterop(IJSRuntime jsRuntime) : IAsyncDisposable
 	}
 
 	/// <summary>
+	///     Focuses an input element and selects all its text.
+	/// </summary>
+	public async ValueTask FocusAndSelectInputAsync(string elementId, CancellationToken cancellationToken = default)
+	{
+		IJSObjectReference module = await GetModuleAsync().ConfigureAwait(false);
+		await module.InvokeVoidAsync("focusAndSelectInput", cancellationToken, elementId).ConfigureAwait(false);
+	}
+
+	/// <summary>
 	///     Downloads a string as a file via the browser.
 	/// </summary>
 	public async ValueTask DownloadFileAsync(string fileName, string content,

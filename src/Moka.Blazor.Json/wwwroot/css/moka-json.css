@@ -281,6 +281,13 @@
 }
 
 /* Toggle sizes */
+.moka-json-toggle--xs,
+.moka-json-toggle--xs.moka-json-node-toggle-placeholder {
+    width: 12px;
+    height: 12px;
+    font-size: 6px;
+}
+
 .moka-json-toggle--sm,
 .moka-json-toggle--sm.moka-json-node-toggle-placeholder {
     width: 14px;
@@ -300,6 +307,13 @@
     width: 20px;
     height: 20px;
     font-size: 13px;
+}
+
+.moka-json-toggle--xl,
+.moka-json-toggle--xl.moka-json-node-toggle-placeholder {
+    width: 24px;
+    height: 24px;
+    font-size: 16px;
 }
 
 .moka-json-key {
@@ -474,4 +488,30 @@
 
 .moka-json-inline-edit--error {
     border-color: var(--moka-json-error-color);
+}
+
+.moka-json-inline-edit-error {
+    color: var(--moka-json-error-color);
+    font-size: 11px;
+    margin-left: 4px;
+}
+
+.moka-json-inline-edit-select {
+    padding: 1px 4px;
+    border: 1px solid #007acc;
+    border-radius: 2px;
+    background: var(--moka-json-bg);
+    color: var(--moka-json-color-text);
+    font-family: inherit;
+    font-size: inherit;
+    outline: none;
+}
+
+/* Editable node cursor hint */
+.moka-json-node--editable .moka-json-value--string,
+.moka-json-node--editable .moka-json-value--number,
+.moka-json-node--editable .moka-json-value--boolean,
+.moka-json-node--editable .moka-json-value--null,
+.moka-json-node--editable .moka-json-key {
+    cursor: text;
 }

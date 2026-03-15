@@ -219,6 +219,9 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	private Timer? _searchDebounceTimer;
 	private bool _disposed;
 
+	private InlineEditState? _activeEdit;
+	private EditHistory? _editHistory;
+
 	#endregion
 
 	#region Computed Properties
@@ -633,9 +636,236 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		}
 	}
 
-	private void HandleDoubleClick(string _)
+	private void HandleDoubleClick(string path)
 	{
-		// Placeholder for edit mode
+		if (ReadOnly || _documentManager is null)
+		{
+			return;
+		}
+
+		try
+		{
+			JsonElement element = _documentManager.NavigateToElement(path);
+
+			// Only primitives are directly editable via double-click
+			if (element.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+			{
+				return;
+			}
+
+			string rawValue = element.ValueKind == JsonValueKind.String
+				? element.GetString() ?? ""
+				: element.GetRawText();
+
+			_activeEdit = new InlineEditState
+			{
+				Path = path,
+				Target = InlineEditTarget.Value,
+				OriginalValue = rawValue,
+				CurrentValue = rawValue,
+				ValueKind = element.ValueKind
+			};
+			StateHasChanged();
+		}
+		catch (KeyNotFoundException)
+		{
+		}
+	}
+
+	private void StartKeyRename(string path, string currentKey)
+	{
+		_activeEdit = new InlineEditState
+		{
+			Path = path,
+			Target = InlineEditTarget.Key,
+			OriginalValue = currentKey,
+			CurrentValue = currentKey,
+			ValueKind = JsonValueKind.String
+		};
+		StateHasChanged();
+	}
+
+	private async Task HandleEditCommit(InlineEditResult result)
+	{
+		if (_activeEdit is null || _documentManager is null)
+		{
+			return;
+		}
+
+		if (!result.Committed)
+		{
+			_activeEdit = null;
+			StateHasChanged();
+			return;
+		}
+
+		// Don't commit if value hasn't changed
+		if (result.NewValue == _activeEdit.OriginalValue)
+		{
+			_activeEdit = null;
+			StateHasChanged();
+			return;
+		}
+
+		string editPath = _activeEdit.Path;
+		InlineEditTarget editTarget = _activeEdit.Target;
+		string? oldValue = _activeEdit.OriginalValue;
+
+		try
+		{
+			string newJson;
+			JsonChangeType changeType;
+
+			if (editTarget == InlineEditTarget.Value)
+			{
+				string? error = JsonEditValidator.ValidateValue(result.NewValue, _activeEdit.ValueKind);
+				if (error is not null)
+				{
+					_activeEdit.ValidationError = error;
+					StateHasChanged();
+					return;
+				}
+
+				string jsonLiteral = _activeEdit.ValueKind switch
+				{
+					JsonValueKind.String => JsonSerializer.Serialize(result.NewValue),
+					JsonValueKind.Number => result.NewValue,
+					JsonValueKind.True or JsonValueKind.False => result.NewValue == "true" ? "true" : "false",
+					JsonValueKind.Null => "null",
+					_ => result.NewValue
+				};
+
+				newJson = _documentManager.ReplaceValueAtPath(editPath, jsonLiteral);
+				changeType = JsonChangeType.ValueChanged;
+			}
+			else
+			{
+				newJson = _documentManager.RenameKeyAtPath(editPath, result.NewValue);
+				changeType = JsonChangeType.KeyRenamed;
+			}
+
+			_editHistory ??= new EditHistory();
+			_editHistory.PushSnapshot(_documentManager.GetJsonString());
+
+			_activeEdit = null;
+			_previousJson = newJson;
+			await ReloadFromJsonAsync(newJson);
+
+			await JsonChanged.InvokeAsync(newJson);
+			await OnJsonChanged.InvokeAsync(new JsonChangeEventArgs
+			{
+				FullJson = newJson,
+				Path = editPath,
+				ChangeType = changeType,
+				OldValue = oldValue,
+				NewValue = result.NewValue
+			});
+		}
+		catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException)
+		{
+			_activeEdit!.ValidationError = ex.Message;
+			StateHasChanged();
+		}
+	}
+
+	private void HandleEditCancel()
+	{
+		_activeEdit = null;
+		StateHasChanged();
+	}
+
+	private async Task DeleteNodeAtPath(string path)
+	{
+		if (_documentManager is null)
+		{
+			return;
+		}
+
+		try
+		{
+			_editHistory ??= new EditHistory();
+			_editHistory.PushSnapshot(_documentManager.GetJsonString());
+
+			string newJson = _documentManager.RemoveNodeAtPath(path);
+			_previousJson = newJson;
+			_activeEdit = null;
+			await ReloadFromJsonAsync(newJson);
+
+			await JsonChanged.InvokeAsync(newJson);
+			await OnJsonChanged.InvokeAsync(new JsonChangeEventArgs
+			{
+				FullJson = newJson,
+				Path = path,
+				ChangeType = JsonChangeType.NodeRemoved
+			});
+		}
+		catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException)
+		{
+			_errorMessage = ex.Message;
+			StateHasChanged();
+		}
+	}
+
+	private async Task AddPropertyAtPath(string parentPath)
+	{
+		if (_documentManager is null)
+		{
+			return;
+		}
+
+		try
+		{
+			_editHistory ??= new EditHistory();
+			_editHistory.PushSnapshot(_documentManager.GetJsonString());
+
+			string newJson = _documentManager.AddNodeAtPath(parentPath, null, "null");
+			_previousJson = newJson;
+			await ReloadFromJsonAsync(newJson);
+
+			await JsonChanged.InvokeAsync(newJson);
+			await OnJsonChanged.InvokeAsync(new JsonChangeEventArgs
+			{
+				FullJson = newJson,
+				Path = parentPath,
+				ChangeType = JsonChangeType.NodeAdded
+			});
+		}
+		catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException)
+		{
+			_errorMessage = ex.Message;
+			StateHasChanged();
+		}
+	}
+
+	private async Task AddElementAtPath(string parentPath)
+	{
+		if (_documentManager is null)
+		{
+			return;
+		}
+
+		try
+		{
+			_editHistory ??= new EditHistory();
+			_editHistory.PushSnapshot(_documentManager.GetJsonString());
+
+			string newJson = _documentManager.AddNodeAtPath(parentPath, null, "null");
+			_previousJson = newJson;
+			await ReloadFromJsonAsync(newJson);
+
+			await JsonChanged.InvokeAsync(newJson);
+			await OnJsonChanged.InvokeAsync(new JsonChangeEventArgs
+			{
+				FullJson = newJson,
+				Path = parentPath,
+				ChangeType = JsonChangeType.NodeAdded
+			});
+		}
+		catch (Exception ex) when (ex is InvalidOperationException or KeyNotFoundException)
+		{
+			_errorMessage = ex.Message;
+			StateHasChanged();
+		}
 	}
 
 	private void DismissContextMenu()
@@ -755,6 +985,62 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			}
 		];
 
+		if (!ReadOnly)
+		{
+			_allContextActions.Add(new MokaJsonContextAction
+			{
+				Id = "edit-value",
+				Label = "Edit Value",
+				ShortcutHint = "Dbl-click",
+				Order = 400,
+				HasSeparatorBefore = true,
+				IsVisible = ctx => ctx.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array),
+				OnExecute = ctx =>
+				{
+					HandleDoubleClick(ctx.Path);
+					return ValueTask.CompletedTask;
+				}
+			});
+			_allContextActions.Add(new MokaJsonContextAction
+			{
+				Id = "rename-key",
+				Label = "Rename Key",
+				ShortcutHint = "F2",
+				Order = 410,
+				IsVisible = ctx => ctx.PropertyName is not null,
+				OnExecute = ctx =>
+				{
+					StartKeyRename(ctx.Path, ctx.PropertyName!);
+					return ValueTask.CompletedTask;
+				}
+			});
+			_allContextActions.Add(new MokaJsonContextAction
+			{
+				Id = "delete-node",
+				Label = "Delete",
+				ShortcutHint = "Del",
+				Order = 420,
+				IsVisible = ctx => !string.IsNullOrEmpty(ctx.Path) && ctx.Path != "/",
+				OnExecute = async ctx => await DeleteNodeAtPath(ctx.Path)
+			});
+			_allContextActions.Add(new MokaJsonContextAction
+			{
+				Id = "add-property",
+				Label = "Add Property",
+				Order = 430,
+				IsVisible = ctx => ctx.ValueKind == JsonValueKind.Object,
+				OnExecute = async ctx => await AddPropertyAtPath(ctx.Path)
+			});
+			_allContextActions.Add(new MokaJsonContextAction
+			{
+				Id = "add-element",
+				Label = "Add Element",
+				Order = 440,
+				IsVisible = ctx => ctx.ValueKind == JsonValueKind.Array,
+				OnExecute = async ctx => await AddElementAtPath(ctx.Path)
+			});
+		}
+
 		if (ContextMenuActions is not null)
 		{
 			_allContextActions.AddRange(ContextMenuActions);
@@ -774,6 +1060,12 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			if (element.ValueKind != JsonValueKind.Object)
 			{
 				return;
+			}
+
+			if (!ReadOnly)
+			{
+				_editHistory ??= new EditHistory();
+				_editHistory.PushSnapshot(_documentManager.GetJsonString());
 			}
 
 			// Sort the subtree
@@ -1087,15 +1379,43 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	}
 
 	/// <inheritdoc />
-	public void Undo()
+	public async void Undo()
 	{
-		// Edit mode not yet implemented
+		if (ReadOnly || _editHistory is null || !_editHistory.CanUndo)
+		{
+			return;
+		}
+
+		string? snapshot = _editHistory.Undo();
+		if (snapshot is null)
+		{
+			return;
+		}
+
+		_activeEdit = null;
+		_previousJson = snapshot;
+		await ReloadFromJsonAsync(snapshot);
+		await JsonChanged.InvokeAsync(snapshot);
 	}
 
 	/// <inheritdoc />
-	public void Redo()
+	public async void Redo()
 	{
-		// Edit mode not yet implemented
+		if (ReadOnly || _editHistory is null || !_editHistory.CanRedo)
+		{
+			return;
+		}
+
+		string? snapshot = _editHistory.Redo();
+		if (snapshot is null)
+		{
+			return;
+		}
+
+		_activeEdit = null;
+		_previousJson = snapshot;
+		await ReloadFromJsonAsync(snapshot);
+		await JsonChanged.InvokeAsync(snapshot);
 	}
 
 	/// <inheritdoc />
@@ -1105,7 +1425,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	public string? SelectedPath { get; private set; }
 
 	/// <inheritdoc />
-	public bool IsEditing => false;
+	public bool IsEditing => _activeEdit is not null;
 
 	#endregion
 }

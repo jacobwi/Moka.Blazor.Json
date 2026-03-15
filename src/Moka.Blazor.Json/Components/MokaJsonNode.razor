@@ -44,7 +44,22 @@
 		}
 
 		@* Property key *@
-		@if (Node.PropertyName is not null)
+		@if (IsEditingKey)
+		{
+			<input id="@EditInputId"
+			       class="moka-json-inline-edit"
+			       type="text"
+			       value="@EditState!.CurrentValue"
+			       @oninput="HandleEditInput"
+			       @onkeydown="HandleEditKeyDown"
+			       @onblur="HandleEditBlur"
+			       @onkeydown:stopPropagation="true"/>
+			@if (EditState!.ValidationError is not null)
+			{
+				<span class="moka-json-inline-edit-error">@EditState.ValidationError</span>
+			}
+		}
+		else if (Node.PropertyName is not null)
 		{
 			<span class="moka-json-key">@Node.PropertyName</span>
 		}
@@ -65,6 +80,39 @@
 				{
 					<span class="moka-json-comma">,</span>
 				}
+			}
+		}
+		else if (IsEditingValue)
+		{
+			@if (Node.ValueKind is JsonValueKind.True or JsonValueKind.False)
+			{
+				<select class="moka-json-inline-edit-select"
+				        value="@EditState!.CurrentValue"
+				        @onchange="HandleBoolSelect">
+					<option value="true">true</option>
+					<option value="false">false</option>
+				</select>
+			}
+			else
+			{
+				<input id="@EditInputId"
+				       class="moka-json-inline-edit @(EditState!.ValidationError is not null ? "moka-json-inline-edit--error" : "")"
+				       type="text"
+				       value="@EditState!.CurrentValue"
+				       @oninput="HandleEditInput"
+				       @onkeydown="HandleEditKeyDown"
+				       @onblur="HandleEditBlur"
+				       @onkeydown:stopPropagation="true"/>
+			}
+
+			@if (EditState!.ValidationError is not null)
+			{
+				<span class="moka-json-inline-edit-error">@EditState.ValidationError</span>
+			}
+
+			@if (Node.HasTrailingComma)
+			{
+				<span class="moka-json-comma">,</span>
 			}
 		}
 		else

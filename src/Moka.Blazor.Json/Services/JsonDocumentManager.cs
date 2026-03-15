@@ -1,5 +1,6 @@
 using System.Buffers;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -248,6 +249,166 @@ internal sealed class JsonDocumentManager : IAsyncDisposable
 	}
 
 	/// <summary>
+	///     Replaces the value at the given JSON Pointer path and returns the full modified JSON string.
+	/// </summary>
+	public string ReplaceValueAtPath(string jsonPointer, string jsonLiteral)
+	{
+		ObjectDisposedException.ThrowIf(_disposed, this);
+		if (_document is null)
+		{
+			throw new InvalidOperationException("No document is loaded.");
+		}
+
+		if (string.IsNullOrEmpty(jsonPointer) || jsonPointer == "/")
+		{
+			// Replacing root
+			return jsonLiteral;
+		}
+
+		var root = JsonNode.Parse(_document.RootElement.GetRawText());
+		JsonNode? target = NavigateJsonNode(root, jsonPointer);
+		JsonNode? parent = target?.Parent;
+		var newValue = JsonNode.Parse(jsonLiteral);
+
+		if (parent is JsonObject parentObj)
+		{
+			string key = GetLastSegment(jsonPointer);
+			parentObj[key] = newValue;
+		}
+		else if (parent is JsonArray parentArr)
+		{
+			int index = int.Parse(GetLastSegment(jsonPointer), CultureInfo.InvariantCulture);
+			parentArr[index] = newValue;
+		}
+
+		return root?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? jsonLiteral;
+	}
+
+	/// <summary>
+	///     Renames a property key at the given path and returns the full modified JSON string.
+	/// </summary>
+	public string RenameKeyAtPath(string jsonPointer, string newKeyName)
+	{
+		ObjectDisposedException.ThrowIf(_disposed, this);
+		if (_document is null)
+		{
+			throw new InvalidOperationException("No document is loaded.");
+		}
+
+		string parentPath = jsonPointer[..jsonPointer.LastIndexOf('/')];
+		if (string.IsNullOrEmpty(parentPath))
+		{
+			parentPath = "";
+		}
+
+		var root = JsonNode.Parse(_document.RootElement.GetRawText());
+		JsonNode? parentNode = string.IsNullOrEmpty(parentPath)
+			? root
+			: NavigateJsonNode(root, parentPath);
+
+		if (parentNode is not JsonObject parentObj)
+		{
+			throw new InvalidOperationException("Parent is not an object.");
+		}
+
+		string oldKey = UnescapeSegment(GetLastSegment(jsonPointer));
+
+		// Preserve insertion order by rebuilding
+		var entries = new List<KeyValuePair<string, JsonNode?>>();
+		foreach (KeyValuePair<string, JsonNode?> kvp in parentObj)
+		{
+			if (kvp.Key == oldKey)
+			{
+				entries.Add(new KeyValuePair<string, JsonNode?>(newKeyName, kvp.Value?.DeepClone()));
+			}
+			else
+			{
+				entries.Add(new KeyValuePair<string, JsonNode?>(kvp.Key, kvp.Value?.DeepClone()));
+			}
+		}
+
+		parentObj.Clear();
+		foreach (KeyValuePair<string, JsonNode?> entry in entries)
+		{
+			parentObj[entry.Key] = entry.Value;
+		}
+
+		return root?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
+	}
+
+	/// <summary>
+	///     Removes the node at the given JSON Pointer path and returns the full modified JSON string.
+	/// </summary>
+	public string RemoveNodeAtPath(string jsonPointer)
+	{
+		ObjectDisposedException.ThrowIf(_disposed, this);
+		if (_document is null)
+		{
+			throw new InvalidOperationException("No document is loaded.");
+		}
+
+		if (string.IsNullOrEmpty(jsonPointer) || jsonPointer == "/")
+		{
+			throw new InvalidOperationException("Cannot remove root node.");
+		}
+
+		string parentPath = jsonPointer[..jsonPointer.LastIndexOf('/')];
+		if (string.IsNullOrEmpty(parentPath))
+		{
+			parentPath = "";
+		}
+
+		var root = JsonNode.Parse(_document.RootElement.GetRawText());
+		JsonNode? parentNode = string.IsNullOrEmpty(parentPath)
+			? root
+			: NavigateJsonNode(root, parentPath);
+
+		string lastSegment = UnescapeSegment(GetLastSegment(jsonPointer));
+
+		if (parentNode is JsonObject parentObj)
+		{
+			parentObj.Remove(lastSegment);
+		}
+		else if (parentNode is JsonArray parentArr)
+		{
+			int index = int.Parse(lastSegment, CultureInfo.InvariantCulture);
+			parentArr.RemoveAt(index);
+		}
+
+		return root?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
+	}
+
+	/// <summary>
+	///     Adds a child node to the container at the given path and returns the full modified JSON string.
+	/// </summary>
+	public string AddNodeAtPath(string parentPath, string? propertyName, string valueJson)
+	{
+		ObjectDisposedException.ThrowIf(_disposed, this);
+		if (_document is null)
+		{
+			throw new InvalidOperationException("No document is loaded.");
+		}
+
+		var root = JsonNode.Parse(_document.RootElement.GetRawText());
+		JsonNode? parentNode = string.IsNullOrEmpty(parentPath)
+			? root
+			: NavigateJsonNode(root, parentPath);
+		var newValue = JsonNode.Parse(valueJson);
+
+		if (parentNode is JsonObject parentObj)
+		{
+			string key = propertyName ?? GenerateUniqueKey(parentObj);
+			parentObj[key] = newValue;
+		}
+		else if (parentNode is JsonArray parentArr)
+		{
+			parentArr.Add(newValue);
+		}
+
+		return root?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
+	}
+
+	/// <summary>
 	///     Counts all nodes in the document tree recursively.
 	/// </summary>
 	/// <returns>The total number of nodes.</returns>
@@ -401,6 +562,67 @@ internal sealed class JsonDocumentManager : IAsyncDisposable
 		public override void SetLength(long value) => throw new NotSupportedException();
 
 		public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
+	}
+
+	private static JsonNode? NavigateJsonNode(JsonNode? root, string jsonPointer)
+	{
+		if (root is null)
+		{
+			throw new InvalidOperationException("Root node is null.");
+		}
+
+		if (string.IsNullOrEmpty(jsonPointer) || jsonPointer == "/")
+		{
+			return root;
+		}
+
+		JsonNode? current = root;
+		string[] segments = jsonPointer.Split('/', StringSplitOptions.RemoveEmptyEntries);
+
+		foreach (string segment in segments)
+		{
+			string unescaped = UnescapeSegment(segment);
+			if (current is JsonObject obj)
+			{
+				current = obj[unescaped];
+			}
+			else if (current is JsonArray arr && int.TryParse(unescaped, out int idx))
+			{
+				current = arr[idx];
+			}
+			else
+			{
+				throw new KeyNotFoundException($"Cannot navigate to '{jsonPointer}'.");
+			}
+		}
+
+		return current;
+	}
+
+	private static string GetLastSegment(string jsonPointer)
+	{
+		int lastSlash = jsonPointer.LastIndexOf('/');
+		return lastSlash >= 0 ? jsonPointer[(lastSlash + 1)..] : jsonPointer;
+	}
+
+	private static string UnescapeSegment(string segment) => segment.Replace("~1", "/").Replace("~0", "~");
+
+	private static string GenerateUniqueKey(JsonObject obj)
+	{
+		string baseName = "newProperty";
+		if (!obj.ContainsKey(baseName))
+		{
+			return baseName;
+		}
+
+		for (int i = 1;; i++)
+		{
+			string candidate = $"{baseName}{i}";
+			if (!obj.ContainsKey(candidate))
+			{
+				return candidate;
+			}
+		}
 	}
 
 	internal static string FormatBytes(long bytes)
