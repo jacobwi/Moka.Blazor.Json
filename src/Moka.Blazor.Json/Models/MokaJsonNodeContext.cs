@@ -29,6 +29,11 @@ public sealed class MokaJsonNodeContext
 	public string? PropertyName { get; init; }
 
 	/// <summary>
+	///     The full raw JSON text of this node's value.
+	/// </summary>
+	public required string RawValue { get; init; }
+
+	/// <summary>
 	///     The raw JSON text of this node's value (truncated for large subtrees).
 	/// </summary>
 	public required string RawValuePreview { get; init; }

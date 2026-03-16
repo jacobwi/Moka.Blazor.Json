@@ -56,3 +56,24 @@ public enum MokaJsonToggleSize
 	/// </summary>
 	ExtraLarge
 }
+
+/// <summary>
+///     Specifies the initial collapse behavior when a document is loaded.
+/// </summary>
+public enum MokaJsonCollapseMode
+{
+	/// <summary>
+	///     Expand to <c>MaxDepthExpanded</c> depth (default behavior).
+	/// </summary>
+	Depth,
+
+	/// <summary>
+	///     Collapse everything — show only the root brackets <c>{ }</c> or <c>[ ]</c>.
+	/// </summary>
+	Root,
+
+	/// <summary>
+	///     Expand all nodes in the tree.
+	/// </summary>
+	Expanded
+}

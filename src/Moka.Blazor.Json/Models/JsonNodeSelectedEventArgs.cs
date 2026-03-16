@@ -28,6 +28,11 @@ public sealed class JsonNodeSelectedEventArgs : EventArgs
 	public string? PropertyName { get; init; }
 
 	/// <summary>
+	///     The full raw JSON text of this node's value.
+	/// </summary>
+	public required string RawValue { get; init; }
+
+	/// <summary>
 	///     A preview of the raw JSON value (truncated for large values).
 	/// </summary>
 	public required string RawValuePreview { get; init; }

@@ -20,15 +20,43 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 
 	public async Task DisposeAsync() => await _ctx.DisposeAsync();
 
+	#region Context Menu Data
+
+	[Fact]
+	public void Context_Menu_RawValue_Is_Not_Truncated()
+	{
+		JsonNodeSelectedEventArgs? selectedArgs = null;
+
+		// Build a JSON with a value longer than 500 chars
+		string longValue = new('x', 1000);
+		string json = $$"""{"data":"{{longValue}}"}""";
+
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, json)
+			.Add(v => v.OnNodeSelected, e => selectedArgs = e)
+			.Add(v => v.MaxDepthExpanded, 2));
+
+		// Click on the "data" node to trigger OnNodeSelected
+		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node");
+		IElement dataNode = nodes.First(n => n.TextContent.Contains("data"));
+		dataNode.Click();
+
+		Assert.NotNull(selectedArgs);
+		Assert.Contains(longValue, selectedArgs.RawValue);
+		Assert.True(selectedArgs.RawValuePreview.Length <= 503); // 500 + "..."
+	}
+
+	#endregion
+
 	#region Rendering & Parameters
 
 	[Fact]
-	public void Renders_Loading_State_When_No_Json()
+	public void No_Loading_Shown_When_Json_Is_Null()
 	{
 		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>();
 
-		IElement loading = cut.Find(".moka-json-loading");
-		Assert.Equal("Loading...", loading.TextContent);
+		Assert.Empty(cut.FindAll(".moka-json-loading"));
+		Assert.Empty(cut.FindAll(".moka-json-node"));
 	}
 
 	[Fact]
@@ -539,6 +567,55 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 
 		Assert.NotNull(changedJson);
 		Assert.Contains("newProperty", changedJson);
+	}
+
+	#endregion
+
+	#region Collapse Mode
+
+	[Fact]
+	public void CollapseMode_Root_Shows_Minimal_Nodes()
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"a":{"b":1},"c":2}""")
+			.Add(v => v.CollapseMode, MokaJsonCollapseMode.Root));
+
+		// Root mode: only the root object and its closing bracket should be visible
+		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node");
+		Assert.True(nodes.Count <= 2);
+	}
+
+	[Fact]
+	public void CollapseMode_Expanded_Shows_All_Nodes()
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"a":{"b":1},"c":2}""")
+			.Add(v => v.CollapseMode, MokaJsonCollapseMode.Expanded));
+
+		// Expanded mode: all nodes visible including nested
+		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node");
+		Assert.True(nodes.Count >= 5);
+	}
+
+	[Fact]
+	public void CollapseMode_Depth_Uses_MaxDepthExpanded()
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"a":{"b":{"c":1}}}""")
+			.Add(v => v.CollapseMode, MokaJsonCollapseMode.Depth)
+			.Add(v => v.MaxDepthExpanded, 1));
+
+		// Only root and first level expanded, not deeply nested
+		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node");
+		int expandedCount = cut.FindAll(".moka-json-node").Count;
+
+		// With depth 1, "a" object shows but "b" object is collapsed
+		IRenderedComponent<MokaJsonViewer> cutFull = _ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"a":{"b":{"c":1}}}""")
+			.Add(v => v.CollapseMode, MokaJsonCollapseMode.Expanded));
+
+		int fullCount = cutFull.FindAll(".moka-json-node").Count;
+		Assert.True(expandedCount < fullCount);
 	}
 
 	#endregion

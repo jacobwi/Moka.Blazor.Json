@@ -163,6 +163,12 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	public MokaJsonToggleSize ToggleSize { get; set; } = MokaJsonToggleSize.Small;
 
 	/// <summary>
+	///     Initial collapse behavior when a document is loaded. Default is <see cref="MokaJsonCollapseMode.Depth" />.
+	/// </summary>
+	[Parameter]
+	public MokaJsonCollapseMode CollapseMode { get; set; } = MokaJsonCollapseMode.Depth;
+
+	/// <summary>
 	///     Extra content to render in the toolbar.
 	/// </summary>
 	[Parameter]
@@ -188,6 +194,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	private List<FlattenedJsonNode>? _flatNodes;
 	private int _selectedDepth;
 	private bool _isLoaded;
+	private bool _isLoading;
 	private bool _isFormatted = true;
 	private string? _errorMessage;
 	private string? _previousJson;
@@ -264,6 +271,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	{
 		_errorMessage = null;
 		_isLoaded = false;
+		_isLoading = true;
 		_flatNodes = null;
 
 		// Clear stale search state from previous document
@@ -293,12 +301,25 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			else
 			{
 				await manager.DisposeAsync();
+				_isLoading = false;
 				return;
 			}
 
 			_documentManager = manager;
 
-			_treeFlattener.ExpandToDepth(manager.RootElement, MaxDepthExpanded);
+			switch (CollapseMode)
+			{
+				case MokaJsonCollapseMode.Root:
+					_treeFlattener.ExpandToDepth(manager.RootElement, 0);
+					break;
+				case MokaJsonCollapseMode.Expanded:
+					_treeFlattener.ExpandAll(manager.RootElement);
+					break;
+				default:
+					_treeFlattener.ExpandToDepth(manager.RootElement, MaxDepthExpanded);
+					break;
+			}
+
 			_flatNodes = _treeFlattener.Flatten(manager.RootElement);
 
 			_documentSize = JsonDocumentManager.FormatBytes(manager.DocumentSizeBytes);
@@ -352,17 +373,20 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			_isValid = true;
 			_validationError = null;
 			_isLoaded = true;
+			_isLoading = false;
 		}
 		catch (JsonException ex)
 		{
 			_isValid = false;
 			_validationError = ex.Message;
 			_errorMessage = ex.Message;
+			_isLoading = false;
 			await RaiseError(ex.Message, ex, ex.BytePositionInLine, ex.LineNumber);
 		}
 		catch (Exception ex) when (ex is not OperationCanceledException)
 		{
 			_errorMessage = ex.Message;
+			_isLoading = false;
 			await RaiseError(ex.Message, ex);
 		}
 	}
@@ -435,7 +459,12 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	private void HandleCollapseAll()
 	{
-		_treeFlattener.CollapseAll();
+		if (_documentManager is null)
+		{
+			return;
+		}
+
+		_treeFlattener.ExpandToDepth(_documentManager.RootElement, 0);
 		RefreshFlatNodes();
 	}
 
@@ -582,13 +611,15 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 				_selectedDepth = segments.Length;
 				string? propName = segments.Length > 0 ? segments[^1].Replace("~1", "/").Replace("~0", "~") : null;
 
+				string rawText = element.GetRawText();
 				await OnNodeSelected.InvokeAsync(new JsonNodeSelectedEventArgs
 				{
 					Path = path,
 					Depth = _selectedDepth,
 					ValueKind = element.ValueKind,
 					PropertyName = propName,
-					RawValuePreview = TruncateRawValue(element)
+					RawValue = rawText,
+					RawValuePreview = TruncatePreview(rawText)
 				});
 			}
 			catch (KeyNotFoundException)
@@ -613,13 +644,15 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			string[] segments = args.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 			string? propName = segments.Length > 0 ? segments[^1].Replace("~1", "/").Replace("~0", "~") : null;
 
+			string rawText = element.GetRawText();
 			_contextMenuNodeContext = new MokaJsonNodeContext
 			{
 				Path = args.Path,
 				Depth = segments.Length,
 				ValueKind = element.ValueKind,
 				PropertyName = propName,
-				RawValuePreview = TruncateRawValue(element),
+				RawValue = rawText,
+				RawValuePreview = TruncatePreview(rawText),
 				Viewer = this
 			};
 
@@ -919,7 +952,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 				Label = "Copy Value",
 				ShortcutHint = "Ctrl+C",
 				Order = 10,
-				OnExecute = async ctx => await Interop.CopyToClipboardAsync(ctx.RawValuePreview)
+				OnExecute = async ctx => await Interop.CopyToClipboardAsync(ctx.RawValue)
 			},
 			new MokaJsonContextAction
 			{
@@ -1298,11 +1331,8 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		}
 	}
 
-	private static string TruncateRawValue(JsonElement element, int maxLength = 500)
-	{
-		string raw = element.GetRawText();
-		return raw.Length > maxLength ? raw[..maxLength] + "..." : raw;
-	}
+	private static string TruncatePreview(string raw, int maxLength = 500) =>
+		raw.Length > maxLength ? raw[..maxLength] + "..." : raw;
 
 	private static string EscapeJsonPointer(string segment) => segment.Replace("~", "~0").Replace("/", "~1");
 

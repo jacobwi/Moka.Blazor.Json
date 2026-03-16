@@ -13,11 +13,11 @@
 			<span class="moka-json-error-details">@_errorMessage</span>
 		</div>
 	}
-	else if (!_isLoaded)
+	else if (!_isLoaded && _isLoading)
 	{
 		<div class="moka-json-loading">Loading...</div>
 	}
-	else
+	else if (_isLoaded)
 	{
 		@if (ShowToolbar)
 		{
