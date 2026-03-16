@@ -45,13 +45,13 @@
     ],
     "output": "_site",
     "template": [
-      "default",
       "modern"
     ],
     "globalMetadata": {
       "_appTitle": "Moka.Blazor.Json",
       "_appName": "Moka.Blazor.Json",
       "_appFooter": "Moka.Blazor.Json - MIT License",
+      "_appLogoPath": "images/logo.png",
       "_enableSearch": true,
       "_enableNewTab": true
     }
