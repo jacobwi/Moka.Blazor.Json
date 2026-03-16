@@ -16,7 +16,7 @@ A high-performance Blazor JSON viewer and editor component with virtualized rend
 - **Key sorting** - sort object keys alphabetically (single level or recursive)
 - **Node scoping** - zoom into any subtree
 - **Zero external dependencies** - built on `System.Text.Json`
-- **Multi-target** - supports .NET 8, .NET 9, and .NET 10
+- **Multi-target** - supports .NET 9, and .NET 10
 
 ## Installation
 
