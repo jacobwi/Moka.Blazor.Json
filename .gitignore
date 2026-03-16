@@ -786,5 +786,10 @@ FodyWeavers.xsd
 # JetBrains Rider
 *.sln.iml
 
+### DocFX ###
+docs/_site/
+docs/api/*.yml
+docs/api/.manifest
+
 ### VisualStudio Patch ###
 # Additional files built by Visual Studio

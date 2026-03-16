@@ -290,7 +290,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 				LoggerFactory.CreateLogger<JsonDocumentManager>(),
 				OptionsAccessor);
 
-			if (Json is not null)
+			if (!string.IsNullOrWhiteSpace(Json))
 			{
 				await manager.ParseAsync(Json);
 			}
