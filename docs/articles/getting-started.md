@@ -28,7 +28,7 @@ builder.Services.AddMokaJsonViewer(options =>
 
 ## Basic Usage
 
-```cshtml
+```html
 @using Moka.Blazor.Json.Components
 
 <MokaJsonViewer Json="@myJson" />
@@ -42,7 +42,7 @@ builder.Services.AddMokaJsonViewer(options =>
 
 Use `@bind-Json` to keep your variable in sync when the document is edited:
 
-```cshtml
+```html
 <MokaJsonViewer @bind-Json="myJson" ReadOnly="false" />
 
 @code {
@@ -81,7 +81,7 @@ Use `@bind-Json` to keep your variable in sync when the document is edited:
 | `JsonChanged` | `EventCallback<string?>` | Two-way binding callback |
 | `OnError` | `EventCallback<JsonErrorEventArgs>` | Fires on parse/runtime errors |
 
-```cshtml
+```html
 <MokaJsonViewer Json="@json"
                 OnNodeSelected="HandleNodeSelected"
                 OnError="HandleError" />
@@ -104,7 +104,7 @@ Use `@bind-Json` to keep your variable in sync when the document is edited:
 
 Access the component via `@ref` to call methods on the `IMokaJsonViewer` interface:
 
-```cshtml
+```html
 <MokaJsonViewer @ref="_viewer" Json="@json" />
 
 @code {

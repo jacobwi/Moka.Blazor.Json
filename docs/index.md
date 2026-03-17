@@ -17,7 +17,7 @@ dotnet add package Moka.Blazor.Json
 builder.Services.AddMokaJsonViewer();
 ```
 
-```razor
+```html
 @using Moka.Blazor.Json.Components
 
 <MokaJsonViewer Json="@myJson" />

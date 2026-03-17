@@ -33,7 +33,7 @@ builder.Services.AddMokaJsonViewer(options =>
 
 Control how the tree is initially displayed with the `CollapseMode` parameter:
 
-```cshtml
+```html
 @* Default: expand to MaxDepthExpanded *@
 <MokaJsonViewer Json="@json" CollapseMode="MokaJsonCollapseMode.Depth" MaxDepthExpanded="3" />
 
@@ -48,7 +48,7 @@ Control how the tree is initially displayed with the `CollapseMode` parameter:
 
 Customize the expand/collapse toggle appearance:
 
-```cshtml
+```html
 @* Different styles *@
 <MokaJsonViewer Json="@json" ToggleStyle="MokaJsonToggleStyle.Chevron" />
 <MokaJsonViewer Json="@json" ToggleStyle="MokaJsonToggleStyle.PlusMinus" />
