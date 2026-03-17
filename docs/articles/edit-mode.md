@@ -4,7 +4,7 @@ Set `ReadOnly="false"` to enable inline editing of JSON documents.
 
 ## Basic Setup
 
-```razor
+```cshtml
 <MokaJsonViewer @bind-Json="myJson" ReadOnly="false" />
 ```
 
@@ -51,7 +51,7 @@ All mutations (value edits, key renames, add, delete, sort) are tracked.
 
 Two event callbacks report edit changes:
 
-```razor
+```cshtml
 <MokaJsonViewer Json="@json"
                 ReadOnly="false"
                 OnJsonChanged="HandleChange"

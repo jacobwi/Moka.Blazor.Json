@@ -8,7 +8,7 @@ The viewer uses Blazor's `Virtualize` component to render only visible nodes. Th
 
 For documents too large to hold in a single string, use the `JsonStream` parameter for incremental parsing:
 
-```razor
+```cshtml
 <MokaJsonViewer JsonStream="@_stream" />
 
 @code {

@@ -2,7 +2,7 @@
 
 ## Built-in Themes
 
-```razor
+```cshtml
 <MokaJsonViewer Json="@json" Theme="MokaJsonTheme.Light" />
 <MokaJsonViewer Json="@json" Theme="MokaJsonTheme.Dark" />
 <MokaJsonViewer Json="@json" Theme="MokaJsonTheme.Auto" />  @* follows system preference *@
@@ -51,7 +51,7 @@ Override any of these CSS custom properties to create your own theme:
 
 Use `Theme="MokaJsonTheme.Inherit"` and wrap the viewer with your custom class:
 
-```razor
+```cshtml
 <div class="my-custom-viewer">
     <MokaJsonViewer Json="@json" Theme="MokaJsonTheme.Inherit" />
 </div>

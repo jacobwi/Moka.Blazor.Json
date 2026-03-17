@@ -26,7 +26,7 @@ private readonly List<MokaJsonContextAction> _actions =
 ];
 ```
 
-```razor
+```cshtml
 <MokaJsonViewer Json="@json" ContextMenuActions="_actions" />
 ```
 
