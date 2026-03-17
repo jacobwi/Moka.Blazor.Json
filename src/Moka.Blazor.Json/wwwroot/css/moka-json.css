@@ -231,6 +231,16 @@
     min-height: calc(var(--moka-json-font-size) * var(--moka-json-line-height));
 }
 
+/* ---- Word Wrap Mode ---- */
+.moka-json-viewer--word-wrap .moka-json-node {
+    white-space: normal;
+    word-break: break-all;
+}
+
+.moka-json-viewer--word-wrap .moka-json-tree-viewport {
+    overflow-x: hidden;
+}
+
 .moka-json-node:hover {
     background: var(--moka-json-color-hover);
 }

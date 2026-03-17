@@ -169,6 +169,12 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	public MokaJsonCollapseMode CollapseMode { get; set; } = MokaJsonCollapseMode.Depth;
 
 	/// <summary>
+	///     Whether long values wrap to the next line. Default is <c>true</c>.
+	/// </summary>
+	[Parameter]
+	public bool WordWrap { get; set; } = true;
+
+	/// <summary>
 	///     Extra content to render in the toolbar.
 	/// </summary>
 	[Parameter]

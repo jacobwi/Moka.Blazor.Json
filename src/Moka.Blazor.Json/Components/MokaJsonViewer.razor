@@ -1,6 +1,6 @@
 @namespace Moka.Blazor.Json.Components
 
-<div class="moka-json-viewer" @ref="_viewerRef" style="@HeightStyle" @attributes="AdditionalAttributes"
+<div class="moka-json-viewer @(WordWrap ? "moka-json-viewer--word-wrap" : "")" @ref="_viewerRef" style="@HeightStyle" @attributes="AdditionalAttributes"
      data-moka-json-theme="@ThemeAttribute"
      @onkeydown="HandleKeyDown">
 

@@ -67,6 +67,7 @@ Use `@bind-Json` to keep your variable in sync when the document is edited:
 | `CollapseMode` | `MokaJsonCollapseMode` | `Depth` | Initial collapse behavior (`Depth`, `Root`, `Expanded`) |
 | `Height` | `string` | `"400px"` | Component height |
 | `ToggleStyle` | `MokaJsonToggleStyle` | `Triangle` | Toggle icon style |
+| `WordWrap` | `bool` | `true` | Wrap long values to the next line |
 | `ToggleSize` | `MokaJsonToggleSize` | `Small` | Toggle icon size |
 | `ContextMenuActions` | `IReadOnlyList<MokaJsonContextAction>?` | `null` | Custom context menu actions |
 | `ToolbarExtra` | `RenderFragment?` | `null` | Extra toolbar content |
