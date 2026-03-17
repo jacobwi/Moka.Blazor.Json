@@ -1,7 +1,7 @@
 <Project>
 	<!-- NuGet package metadata shared by all packable projects (evaluated AFTER csproj so IsPackable is available) -->
 	<PropertyGroup Condition="'$(IsPackable)' == 'true'">
-		<Version>0.1.9</Version>
+		<Version>0.1.10</Version>
 		<Authors>jacobwi, BCat, Moka</Authors>
 		<Copyright>Copyright (c) Moka 2026</Copyright>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
