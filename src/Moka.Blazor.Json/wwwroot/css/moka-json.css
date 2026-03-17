@@ -234,6 +234,15 @@
 /* ---- Word Wrap Mode ---- */
 .moka-json-viewer--word-wrap .moka-json-node {
     white-space: normal;
+    flex-wrap: wrap;
+}
+
+.moka-json-viewer--word-wrap .moka-json-node .moka-json-key {
+    white-space: nowrap;
+}
+
+.moka-json-viewer--word-wrap .moka-json-node .moka-json-value--string,
+.moka-json-viewer--word-wrap .moka-json-node .moka-json-value--number {
     word-break: break-all;
 }
 
