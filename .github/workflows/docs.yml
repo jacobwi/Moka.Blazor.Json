@@ -29,7 +29,7 @@ jobs:
           dotnet-quality: 'preview'
 
       - name: Install MokaDocs
-        run: dotnet tool install --global mokadocs --version 1.0.3
+        run: dotnet tool install --global mokadocs
 
       - name: Build documentation
         run: mokadocs build
