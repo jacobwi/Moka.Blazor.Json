@@ -234,7 +234,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	}
 
 	[Fact]
-	public void Collapse_Button_Collapses_All_Nodes()
+	public void Collapse_Button_Collapses_All_Except_Root()
 	{
 		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
 			.Add(v => v.Json, """{"a":{"b":1},"c":2}""")
@@ -247,7 +247,10 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		collapseButton.Click();
 
 		int collapsedNodeCount = cut.FindAll(".moka-json-node").Count;
+		// Collapse keeps only root expanded — all children collapsed
 		Assert.True(collapsedNodeCount < expandedNodeCount);
+		// Root bracket + collapsed children + closing bracket should still be visible
+		Assert.True(collapsedNodeCount >= 2);
 	}
 
 	#endregion

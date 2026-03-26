@@ -186,6 +186,12 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	public bool WordWrap { get; set; } = true;
 
 	/// <summary>
+	///     Whether to show child count (e.g. "13 items") on collapsed containers. Default is <c>true</c>.
+	/// </summary>
+	[Parameter]
+	public bool ShowChildCount { get; set; } = true;
+
+	/// <summary>
 	///     How toolbar buttons are displayed. Overrides <see cref="MokaJsonViewerOptions.DefaultToolbarMode" />.
 	///     When <c>null</c>, the global default from DI is used.
 	/// </summary>
@@ -386,7 +392,19 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 					var manager = new JsonDocumentManager(
 						LoggerFactory.CreateLogger<JsonDocumentManager>(),
 						OptionsAccessor);
-					await manager.ParseAsync(json);
+
+					// Offload parsing to background thread so UI stays responsive
+					if (byteCount > OptionsAccessor.Value.BackgroundStatsThresholdBytes)
+					{
+						// Show loading state before expensive parse
+						StateHasChanged();
+						await Task.Run(() => manager.ParseAsync(json));
+					}
+					else
+					{
+						await manager.ParseAsync(json);
+					}
+
 					_documentManager = manager;
 					_documentSource = manager;
 				}
@@ -413,12 +431,23 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 					var manager = new JsonDocumentManager(
 						LoggerFactory.CreateLogger<JsonDocumentManager>(),
 						OptionsAccessor);
-					await manager.ParseAsync(JsonStream);
+
+					// Offload stream parsing to background thread so UI stays responsive
+					bool isLargeStream = JsonStream.CanSeek &&
+					                     JsonStream.Length > OptionsAccessor.Value.BackgroundStatsThresholdBytes;
+					if (isLargeStream)
+					{
+						StateHasChanged();
+						Stream stream = JsonStream;
+						await Task.Run(() => manager.ParseAsync(stream));
+					}
+					else
+					{
+						await manager.ParseAsync(JsonStream);
+					}
+
 					_documentManager = manager;
 					_documentSource = manager;
-
-					// If non-seekable stream ended up being large, lazy mode won't kick in.
-					// That's expected — we can't determine size without reading for non-seekable streams.
 				}
 			}
 			else
@@ -698,7 +727,11 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			CancellationTokenSource cts = _treeCts = new CancellationTokenSource();
 			try
 			{
-				await Task.Run(() => _treeFlattener.ExpandToDepth(source, 0), cts.Token);
+				await Task.Run(() =>
+				{
+					_treeFlattener.CollapseAll();
+					_treeFlattener.Expand("");
+				}, cts.Token);
 				if (!cts.Token.IsCancellationRequested)
 				{
 					await RefreshFlatNodesAsync();
@@ -719,7 +752,8 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		}
 		else
 		{
-			_treeFlattener.ExpandToDepth(source, 0);
+			_treeFlattener.CollapseAll();
+			_treeFlattener.Expand("");
 			RefreshFlatNodes();
 		}
 	}
@@ -1242,14 +1276,23 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	private void HandleSettingsToolbarModeChanged(MokaJsonToolbarMode value) =>
 		ToolbarMode = value;
 
-	private void HandleSettingsToggleStyleChanged(MokaJsonToggleStyle value) =>
+	private void HandleSettingsToggleStyleChanged(MokaJsonToggleStyle value)
+	{
 		ToggleStyle = value;
+		StateHasChanged();
+	}
 
-	private void HandleSettingsToggleSizeChanged(MokaJsonToggleSize value) =>
+	private void HandleSettingsToggleSizeChanged(MokaJsonToggleSize value)
+	{
 		ToggleSize = value;
+		StateHasChanged();
+	}
 
-	private void HandleSettingsShowLineNumbersChanged(bool value) =>
+	private void HandleSettingsShowLineNumbersChanged(bool value)
+	{
 		ShowLineNumbers = value;
+		StateHasChanged();
+	}
 
 	private void HandleSettingsWordWrapChanged(bool value) =>
 		WordWrap = value;
@@ -1259,6 +1302,12 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	private void HandleSettingsShowBottomBarChanged(bool value) =>
 		ShowBottomBar = value;
+
+	private void HandleSettingsShowChildCountChanged(bool value)
+	{
+		ShowChildCount = value;
+		StateHasChanged();
+	}
 
 	private void HandleSettingsMaxDepthChanged(int value) =>
 		MaxDepthExpanded = value;

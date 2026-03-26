@@ -52,6 +52,12 @@ public sealed partial class MokaJsonTreeViewport : ComponentBase
 	public bool ShowLineNumbers { get; set; }
 
 	/// <summary>
+	///     Whether to show child count on collapsed containers.
+	/// </summary>
+	[Parameter]
+	public bool ShowChildCount { get; set; } = true;
+
+	/// <summary>
 	///     Style of expand/collapse toggle indicators.
 	/// </summary>
 	[Parameter]

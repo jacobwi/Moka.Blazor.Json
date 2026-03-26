@@ -67,6 +67,12 @@ public sealed partial class MokaJsonNode : ComponentBase
 	public MokaJsonToggleSize ToggleSize { get; set; }
 
 	/// <summary>
+	///     Whether to show the child count (e.g. "13 items") on collapsed containers.
+	/// </summary>
+	[Parameter]
+	public bool ShowChildCount { get; set; } = true;
+
+	/// <summary>
 	///     Whether the viewer is in read-only mode.
 	/// </summary>
 	[Parameter]

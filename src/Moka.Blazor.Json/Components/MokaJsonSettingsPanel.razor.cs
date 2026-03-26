@@ -87,6 +87,12 @@ public sealed partial class MokaJsonSettingsPanel : ComponentBase
 
 	[Parameter] public EventCallback<bool> ShowBottomBarChanged { get; set; }
 
+	/// <summary>Whether child count is shown on collapsed containers.</summary>
+	[Parameter]
+	public bool ShowChildCount { get; set; }
+
+	[Parameter] public EventCallback<bool> ShowChildCountChanged { get; set; }
+
 	#endregion
 
 	#region Behavior Settings

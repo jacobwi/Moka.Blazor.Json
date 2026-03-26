@@ -116,6 +116,14 @@
 			</label>
 		</div>
 
+		<div class="moka-json-settings-row">
+			<label class="moka-json-settings-check">
+				<input type="checkbox" checked="@ShowChildCount"
+				       @onchange="@(e => ShowChildCountChanged.InvokeAsync((bool)e.Value!))"/>
+				Child Count
+			</label>
+		</div>
+
 		@* ── Behavior ── *@
 		<div class="moka-json-settings-group">Behavior</div>
 

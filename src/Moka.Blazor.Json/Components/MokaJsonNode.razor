@@ -74,7 +74,11 @@
 			<span class="moka-json-bracket">@(Node.ValueKind == JsonValueKind.Object ? "{" : "[")</span>
 			@if (!Node.IsExpanded)
 			{
-				<span class="moka-json-collapsed-preview">@GetCollapsedPreview()</span>
+				@if (ShowChildCount)
+				{
+					<span class="moka-json-collapsed-preview">@GetCollapsedPreview()</span>
+				}
+
 				<span class="moka-json-bracket">@(Node.ValueKind == JsonValueKind.Object ? "}" : "]")</span>
 				@if (Node.HasTrailingComma)
 				{
