@@ -52,7 +52,7 @@ theme:
     showLastUpdated: true
 
 build:
-  basePath: /
+  basePath: /Moka.Blazor.Json/
 
 plugins:
   - name: mokadocs-repl
