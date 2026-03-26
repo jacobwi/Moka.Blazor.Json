@@ -4,16 +4,10 @@ namespace Moka.Blazor.Json.Models;
 ///     Snapshot-based undo/redo history for JSON editing.
 ///     Stores full JSON strings, capped at a maximum number of entries.
 /// </summary>
-public sealed class EditHistory
+public sealed class EditHistory(int maxSnapshots = 50)
 {
-	private readonly int _maxSnapshots;
-	private readonly List<string> _snapshots = new();
+	private readonly List<string> _snapshots = [];
 	private int _currentIndex = -1;
-
-	public EditHistory(int maxSnapshots = 50)
-	{
-		_maxSnapshots = maxSnapshots;
-	}
 
 	public bool CanUndo => _currentIndex > 0;
 	public bool CanRedo => _currentIndex < _snapshots.Count - 1;
@@ -30,7 +24,7 @@ public sealed class EditHistory
 		_currentIndex = _snapshots.Count - 1;
 
 		// Evict oldest if over capacity
-		if (_snapshots.Count > _maxSnapshots)
+		if (_snapshots.Count > maxSnapshots)
 		{
 			_snapshots.RemoveAt(0);
 			_currentIndex--;

@@ -1,3 +1,7 @@
+---
+title: "Custom Context Menu"
+---
+
 # Custom Context Menu
 
 The viewer comes with built-in context menu actions (Copy Value, Copy Path, Expand/Collapse, Sort Keys, etc.). You can add custom actions alongside them.
@@ -15,7 +19,7 @@ private readonly List<MokaJsonContextAction> _actions =
         Order = 500,
         HasSeparatorBefore = true,
         IsVisible = ctx => ctx.ValueKind == JsonValueKind.String
-                           && ctx.RawValue.StartsWith("\"http", StringComparison.OrdinalIgnoreCase),
+                           && ctx.RawValue.StartsWith(""http", StringComparison.OrdinalIgnoreCase),
         OnExecute = ctx =>
         {
             var url = ctx.RawValue.Trim('"');

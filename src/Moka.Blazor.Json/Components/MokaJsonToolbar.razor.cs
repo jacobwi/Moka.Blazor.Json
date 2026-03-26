@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using Moka.Blazor.Json.Models;
 
 namespace Moka.Blazor.Json.Components;
 
@@ -38,4 +39,23 @@ public sealed partial class MokaJsonToolbar : ComponentBase
 	/// <summary>Optional extra content to render at the end of the toolbar.</summary>
 	[Parameter]
 	public RenderFragment? ToolbarExtra { get; set; }
+
+	/// <summary>Whether a heavy operation is in progress (disables action buttons).</summary>
+	[Parameter]
+	public bool IsBusy { get; set; }
+
+	/// <summary>How toolbar buttons are displayed: text, icons, or both.</summary>
+	[Parameter]
+	public MokaJsonToolbarMode ToolbarMode { get; set; } = MokaJsonToolbarMode.Text;
+
+	/// <summary>Callback to toggle the settings panel.</summary>
+	[Parameter]
+	public EventCallback OnSettingsToggle { get; set; }
+
+	/// <summary>Whether the settings gear button is shown. Default is <c>true</c>.</summary>
+	[Parameter]
+	public bool ShowSettingsButton { get; set; } = true;
+
+	private bool ShowIcon => ToolbarMode is not MokaJsonToolbarMode.Text;
+	private bool ShowText => ToolbarMode is not MokaJsonToolbarMode.Icon;
 }

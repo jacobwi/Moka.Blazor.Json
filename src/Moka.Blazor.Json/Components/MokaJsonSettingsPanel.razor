@@ -1,0 +1,174 @@
+@namespace Moka.Blazor.Json.Components
+
+@if (IsVisible)
+{
+	<div class="moka-json-settings-panel" @onclick:stopPropagation="true">
+		<div class="moka-json-settings-header">
+			<span>Settings</span>
+			<button class="moka-json-settings-close" @onclick="OnDismiss" title="Close">&times;</button>
+		</div>
+
+		@* ── Display ── *@
+		<div class="moka-json-settings-group">Display</div>
+
+		<div class="moka-json-settings-row">
+			<span class="moka-json-settings-label">Theme</span>
+			<div class="moka-json-settings-radio">
+				<label class="@RadioClass(Theme == MokaJsonTheme.Light)">
+					<input type="radio" name="theme-@_id" checked="@(Theme == MokaJsonTheme.Light)"
+					       @onchange="@(() => ThemeChanged.InvokeAsync(MokaJsonTheme.Light))"/>Light
+				</label>
+				<label class="@RadioClass(Theme == MokaJsonTheme.Dark)">
+					<input type="radio" name="theme-@_id" checked="@(Theme == MokaJsonTheme.Dark)"
+					       @onchange="@(() => ThemeChanged.InvokeAsync(MokaJsonTheme.Dark))"/>Dark
+				</label>
+				<label class="@RadioClass(Theme == MokaJsonTheme.Auto)">
+					<input type="radio" name="theme-@_id" checked="@(Theme == MokaJsonTheme.Auto)"
+					       @onchange="@(() => ThemeChanged.InvokeAsync(MokaJsonTheme.Auto))"/>Auto
+				</label>
+			</div>
+		</div>
+
+		<div class="moka-json-settings-row">
+			<span class="moka-json-settings-label">Toolbar</span>
+			<div class="moka-json-settings-radio">
+				<label class="@RadioClass(ToolbarMode == MokaJsonToolbarMode.Text)">
+					<input type="radio" name="toolbar-@_id" checked="@(ToolbarMode == MokaJsonToolbarMode.Text)"
+					       @onchange="@(() => ToolbarModeChanged.InvokeAsync(MokaJsonToolbarMode.Text))"/>Text
+				</label>
+				<label class="@RadioClass(ToolbarMode == MokaJsonToolbarMode.Icon)">
+					<input type="radio" name="toolbar-@_id" checked="@(ToolbarMode == MokaJsonToolbarMode.Icon)"
+					       @onchange="@(() => ToolbarModeChanged.InvokeAsync(MokaJsonToolbarMode.Icon))"/>Icon
+				</label>
+				<label class="@RadioClass(ToolbarMode == MokaJsonToolbarMode.IconAndText)">
+					<input type="radio" name="toolbar-@_id" checked="@(ToolbarMode == MokaJsonToolbarMode.IconAndText)"
+					       @onchange="@(() => ToolbarModeChanged.InvokeAsync(MokaJsonToolbarMode.IconAndText))"/>Both
+				</label>
+			</div>
+		</div>
+
+		<div class="moka-json-settings-row">
+			<span class="moka-json-settings-label">Toggle</span>
+			<div class="moka-json-settings-radio">
+				<label class="@RadioClass(ToggleStyle == MokaJsonToggleStyle.Triangle)" title="Triangle">
+					<input type="radio" name="toggle-@_id" checked="@(ToggleStyle == MokaJsonToggleStyle.Triangle)"
+					       @onchange="@(() => ToggleStyleChanged.InvokeAsync(MokaJsonToggleStyle.Triangle))"/>&#x25B6;
+				</label>
+				<label class="@RadioClass(ToggleStyle == MokaJsonToggleStyle.Chevron)" title="Chevron">
+					<input type="radio" name="toggle-@_id" checked="@(ToggleStyle == MokaJsonToggleStyle.Chevron)"
+					       @onchange="@(() => ToggleStyleChanged.InvokeAsync(MokaJsonToggleStyle.Chevron))"/>&#x203A;
+				</label>
+				<label class="@RadioClass(ToggleStyle == MokaJsonToggleStyle.PlusMinus)" title="Plus/Minus">
+					<input type="radio" name="toggle-@_id" checked="@(ToggleStyle == MokaJsonToggleStyle.PlusMinus)"
+					       @onchange="@(() => ToggleStyleChanged.InvokeAsync(MokaJsonToggleStyle.PlusMinus))"/>+/&minus;
+				</label>
+				<label class="@RadioClass(ToggleStyle == MokaJsonToggleStyle.Arrow)" title="Arrow">
+					<input type="radio" name="toggle-@_id" checked="@(ToggleStyle == MokaJsonToggleStyle.Arrow)"
+					       @onchange="@(() => ToggleStyleChanged.InvokeAsync(MokaJsonToggleStyle.Arrow))"/>&#x25B7;
+				</label>
+			</div>
+		</div>
+
+		<div class="moka-json-settings-row">
+			<span class="moka-json-settings-label">Toggle Size</span>
+			<select class="moka-json-settings-select" value="@ToggleSize"
+			        @onchange="HandleToggleSizeChange">
+				<option value="@MokaJsonToggleSize.ExtraSmall">XS</option>
+				<option value="@MokaJsonToggleSize.Small">Small</option>
+				<option value="@MokaJsonToggleSize.Medium">Medium</option>
+				<option value="@MokaJsonToggleSize.Large">Large</option>
+				<option value="@MokaJsonToggleSize.ExtraLarge">XL</option>
+			</select>
+		</div>
+
+		@* ── Layout ── *@
+		<div class="moka-json-settings-group">Layout</div>
+
+		<div class="moka-json-settings-row">
+			<label class="moka-json-settings-check">
+				<input type="checkbox" checked="@ShowLineNumbers"
+				       @onchange="@(e => ShowLineNumbersChanged.InvokeAsync((bool)e.Value!))"/>
+				Line Numbers
+			</label>
+		</div>
+
+		<div class="moka-json-settings-row">
+			<label class="moka-json-settings-check">
+				<input type="checkbox" checked="@WordWrap"
+				       @onchange="@(e => WordWrapChanged.InvokeAsync((bool)e.Value!))"/>
+				Word Wrap
+			</label>
+		</div>
+
+		<div class="moka-json-settings-row">
+			<label class="moka-json-settings-check">
+				<input type="checkbox" checked="@ShowBreadcrumb"
+				       @onchange="@(e => ShowBreadcrumbChanged.InvokeAsync((bool)e.Value!))"/>
+				Breadcrumb
+			</label>
+		</div>
+
+		<div class="moka-json-settings-row">
+			<label class="moka-json-settings-check">
+				<input type="checkbox" checked="@ShowBottomBar"
+				       @onchange="@(e => ShowBottomBarChanged.InvokeAsync((bool)e.Value!))"/>
+				Bottom Bar
+			</label>
+		</div>
+
+		@* ── Behavior ── *@
+		<div class="moka-json-settings-group">Behavior</div>
+
+		<div class="moka-json-settings-row">
+			<span class="moka-json-settings-label">Expand Depth</span>
+			<input type="number" class="moka-json-settings-number" min="0" max="50"
+			       value="@MaxDepthExpanded"
+			       @onchange="HandleDepthChange"/>
+		</div>
+
+		<div class="moka-json-settings-row">
+			<span class="moka-json-settings-label">Collapse</span>
+			<div class="moka-json-settings-radio">
+				<label class="@RadioClass(CollapseMode == MokaJsonCollapseMode.Depth)">
+					<input type="radio" name="collapse-@_id" checked="@(CollapseMode == MokaJsonCollapseMode.Depth)"
+					       @onchange="@(() => CollapseModeChanged.InvokeAsync(MokaJsonCollapseMode.Depth))"/>Depth
+				</label>
+				<label class="@RadioClass(CollapseMode == MokaJsonCollapseMode.Root)">
+					<input type="radio" name="collapse-@_id" checked="@(CollapseMode == MokaJsonCollapseMode.Root)"
+					       @onchange="@(() => CollapseModeChanged.InvokeAsync(MokaJsonCollapseMode.Root))"/>Root
+				</label>
+				<label class="@RadioClass(CollapseMode == MokaJsonCollapseMode.Expanded)">
+					<input type="radio" name="collapse-@_id" checked="@(CollapseMode == MokaJsonCollapseMode.Expanded)"
+					       @onchange="@(() => CollapseModeChanged.InvokeAsync(MokaJsonCollapseMode.Expanded))"/>All
+				</label>
+			</div>
+		</div>
+
+		<div class="moka-json-settings-row">
+			<label class="moka-json-settings-check">
+				<input type="checkbox" checked="@ReadOnly"
+				       @onchange="@(e => ReadOnlyChanged.InvokeAsync((bool)e.Value!))"/>
+				Read Only
+			</label>
+		</div>
+
+		@* ── Search Defaults ── *@
+		<div class="moka-json-settings-group">Search</div>
+
+		<div class="moka-json-settings-row">
+			<label class="moka-json-settings-check">
+				<input type="checkbox" checked="@SearchCaseSensitive"
+				       @onchange="@(e => SearchCaseSensitiveChanged.InvokeAsync((bool)e.Value!))"/>
+				Case Sensitive
+			</label>
+		</div>
+
+		<div class="moka-json-settings-row">
+			<label class="moka-json-settings-check">
+				<input type="checkbox" checked="@SearchUseRegex"
+				       @onchange="@(e => SearchUseRegexChanged.InvokeAsync((bool)e.Value!))"/>
+				Regex Mode
+			</label>
+		</div>
+	</div>
+}

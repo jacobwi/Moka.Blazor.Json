@@ -6,12 +6,14 @@
 		<PackageId>Moka.Blazor.Json</PackageId>
 		<Description>A high-performance, zero-dependency Blazor JSON viewer and editor component with virtualization, theming, and streaming support.</Description>
 		<PackageTags>blazor;json;viewer;editor;component;razor;tree;virtualization</PackageTags>
+		<PackageReadmeFile>README.nuget.md</PackageReadmeFile>
 		<!-- CA1848/CA1873: LoggerMessage perf - acceptable for debug logging.
          CA1721: Json property vs GetJson method is intentional.
          CA2227/CA1002: Blazor [Parameter] properties require public setters / List types.
          CA1812: Internal classes instantiated via DI container.
          CA1822: Event handler methods referenced from Razor cannot be static. -->
-		<NoWarn>$(NoWarn);CA1848;CA1873;CA1721;CA2227;CA1002;CA1812;CA1822</NoWarn>
+		<!-- CA1849: RefreshFlatNodes() sync path is intentionally used for small docs to avoid Task.Run overhead. -->
+		<NoWarn>$(NoWarn);CA1848;CA1849;CA1873;CA1721;CA2227;CA1002;CA1812;CA1822</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -25,6 +27,10 @@
 	<ItemGroup>
 		<InternalsVisibleTo Include="Moka.Blazor.Json.Tests" />
 		<InternalsVisibleTo Include="Moka.Blazor.Json.Benchmarks" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<None Include="..\..\README.nuget.md" Pack="true" PackagePath="\" />
 	</ItemGroup>
 
 </Project>

@@ -11,14 +11,14 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 {
 	private readonly BunitContext _ctx = new();
 
-	public Task InitializeAsync()
+	public ValueTask InitializeAsync()
 	{
 		_ctx.JSInterop.Mode = JSRuntimeMode.Loose;
 		_ctx.Services.AddMokaJsonViewer();
-		return Task.CompletedTask;
+		return ValueTask.CompletedTask;
 	}
 
-	public async Task DisposeAsync() => await _ctx.DisposeAsync();
+	public async ValueTask DisposeAsync() => await _ctx.DisposeAsync();
 
 	#region Context Menu Data
 

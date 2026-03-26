@@ -1,3 +1,7 @@
+---
+title: "Theming"
+---
+
 # Theming
 
 ## Built-in Themes

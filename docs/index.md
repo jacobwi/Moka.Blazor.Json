@@ -1,5 +1,5 @@
 ---
-_layout: landing
+title: "Moka.Blazor.Json"
 ---
 
 # Moka.Blazor.Json
@@ -17,7 +17,7 @@ dotnet add package Moka.Blazor.Json
 builder.Services.AddMokaJsonViewer();
 ```
 
-```html
+```razor
 @using Moka.Blazor.Json.Components
 
 <MokaJsonViewer Json="@myJson" />
@@ -25,13 +25,14 @@ builder.Services.AddMokaJsonViewer();
 
 ## Key Features
 
-- **Virtualized rendering** &mdash; handles documents up to 100 MB with smooth scrolling
-- **Inline editing** &mdash; double-click to edit values, rename keys, add/delete nodes with undo/redo
-- **Search** &mdash; plain text, regex, case-sensitive with match navigation
-- **Theming** &mdash; light, dark, auto, or fully custom via CSS variables
-- **Context menu** &mdash; built-in actions + extensible custom actions with type/property filtering
-- **Streaming** &mdash; incremental parsing for large documents via `JsonStream`
-- **Zero dependencies** &mdash; built on `System.Text.Json`
+- **Virtualized rendering** — handles documents up to 2 GB with lazy parsing and smooth scrolling
+- **Inline editing** — double-click to edit values, rename keys, add/delete nodes with undo/redo
+- **Search** — plain text, regex, case-sensitive with match navigation
+- **Theming** — light, dark, auto, or fully custom via CSS variables
+- **Context menu** — built-in actions + extensible custom actions with type/property filtering
+- **Lazy parsing** — documents over 50 MB use byte-offset indexing with on-demand subtree parsing
+- **Streaming search** — search large documents without loading the full DOM
+- **Zero dependencies** — built on `System.Text.Json`
 
 ## Packages
 
@@ -39,8 +40,10 @@ builder.Services.AddMokaJsonViewer();
 |---------|-------------|
 | [Moka.Blazor.Json](https://www.nuget.org/packages/Moka.Blazor.Json) | Main component library |
 | [Moka.Blazor.Json.Abstractions](https://www.nuget.org/packages/Moka.Blazor.Json.Abstractions) | Interfaces and models for programmatic access |
+| [Moka.Blazor.Json.Diagnostics](https://www.nuget.org/packages/Moka.Blazor.Json.Diagnostics) | Debug overlay for lazy parsing diagnostics |
 
 ## Next Steps
 
-- [Getting Started](articles/getting-started.md) &mdash; installation, setup, and basic usage
-- [API Reference](api/index.md) &mdash; full API documentation
+- [Getting Started](guide/getting-started.md) — installation, setup, and basic usage
+- [Configuration](guide/configuration.md) — global options and collapse modes
+- [API Reference](/api) — full API documentation

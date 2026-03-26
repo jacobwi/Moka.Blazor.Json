@@ -6,7 +6,18 @@
     <File Path=".editorconfig" />
     <File Path=".gitignore" />
     <File Path=".github/workflows/ci.yml" />
+    <File Path=".github/workflows/docs.yml" />
+    <File Path="mokadocs.yaml" />
     <File Path="README.md" />
+  </Folder>
+  <Folder Name="/docs/">
+    <File Path="docs/index.md" />
+    <File Path="docs/guide/getting-started.md" />
+    <File Path="docs/guide/configuration.md" />
+    <File Path="docs/guide/theming.md" />
+    <File Path="docs/guide/context-menu.md" />
+    <File Path="docs/guide/edit-mode.md" />
+    <File Path="docs/guide/performance.md" />
   </Folder>
   <Folder Name="/samples/">
     <Project Path="samples/Moka.Blazor.Json.Demo/Moka.Blazor.Json.Demo.csproj" />
@@ -14,6 +25,7 @@
   <Folder Name="/src/">
     <Project Path="src/Moka.Blazor.Json.Abstractions/Moka.Blazor.Json.Abstractions.csproj" />
     <Project Path="src/Moka.Blazor.Json/Moka.Blazor.Json.csproj" />
+    <Project Path="src/Moka.Blazor.Json.Diagnostics/Moka.Blazor.Json.Diagnostics.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Moka.Blazor.Json.Benchmarks/Moka.Blazor.Json.Benchmarks.csproj" />

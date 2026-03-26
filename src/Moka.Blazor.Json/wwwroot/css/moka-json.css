@@ -465,6 +465,118 @@
     color: var(--moka-json-error-color);
 }
 
+.moka-json-lazy-badge {
+    background: var(--moka-json-color-boolean);
+    color: #fff;
+    padding: 0 5px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+    line-height: 16px;
+}
+
+/* ---- Debug Overlay (Moka.Blazor.Json.Diagnostics) ---- */
+.moka-json-debug-overlay {
+    position: absolute;
+    bottom: 28px;
+    right: 8px;
+    width: 340px;
+    background: rgba(10, 10, 14, 0.92);
+    color: #e0e0e0;
+    font-family: 'Cascadia Mono', 'Consolas', monospace;
+    font-size: 11px;
+    line-height: 1.5;
+    padding: 10px 12px;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 9999;
+    pointer-events: none;
+    backdrop-filter: blur(8px);
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+}
+
+.moka-json-debug-title {
+    color: #4fc3f7;
+    font-weight: 700;
+    font-size: 11px;
+    margin-bottom: 8px;
+    letter-spacing: 0.5px;
+}
+
+.moka-json-debug-section-title {
+    color: #81c784;
+    font-weight: 600;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.8px;
+    margin-bottom: 2px;
+}
+
+.moka-json-debug-divider {
+    height: 1px;
+    background: rgba(255, 255, 255, 0.08);
+    margin: 5px 0;
+}
+
+.moka-json-debug-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.moka-json-debug-row > span:first-child {
+    color: #9e9e9e;
+}
+
+.moka-json-debug-row > span:last-child {
+    color: #fff;
+    font-weight: 500;
+}
+
+.moka-json-debug-good { color: #81c784 !important; }
+.moka-json-debug-warn { color: #ffb74d !important; }
+.moka-json-debug-bad { color: #e57373 !important; }
+
+.moka-json-debug-bar-container {
+    width: 100%;
+    height: 6px;
+    background: #222;
+    border-radius: 3px;
+    margin-bottom: 6px;
+    overflow: hidden;
+}
+
+.moka-json-debug-bar-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #4fc3f7, #f48fb1);
+    border-radius: 3px;
+    transition: width 0.3s ease;
+}
+
+.moka-json-debug-parse-entry {
+    display: flex;
+    justify-content: space-between;
+    font-size: 10px;
+    line-height: 1.4;
+}
+
+.moka-json-debug-parse-path {
+    color: #bbb;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+    min-width: 0;
+}
+
+.moka-json-debug-parse-meta {
+    color: #888;
+    white-space: nowrap;
+    margin-left: 8px;
+    flex-shrink: 0;
+}
+
 /* ---- Error State ---- */
 .moka-json-error {
     padding: 16px;
@@ -533,4 +645,271 @@
 .moka-json-node--editable .moka-json-value--null,
 .moka-json-node--editable .moka-json-key {
     cursor: text;
+}
+
+/* Busy overlay */
+.moka-json-busy-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 50;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    background: var(--moka-json-bg, transparent);
+    opacity: 0.85;
+    pointer-events: all;
+}
+
+.moka-json-busy-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid var(--moka-json-color-border, #e0e0e0);
+    border-top-color: var(--moka-json-color-key, #0451a5);
+    border-radius: 50%;
+    animation: moka-json-spin 0.6s linear infinite;
+}
+
+.moka-json-busy-text {
+    font-size: var(--moka-json-font-size, 13px);
+    font-family: var(--moka-json-font-family, monospace);
+    color: var(--moka-json-color-text, #1e1e1e);
+}
+
+@keyframes moka-json-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Disabled toolbar buttons */
+.moka-json-toolbar button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+/* Inline SVG icons */
+.moka-json-icon {
+    display: inline-block;
+    vertical-align: middle;
+    flex-shrink: 0;
+}
+
+.moka-json-toolbar button {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+/* Context menu icon column */
+.moka-json-context-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    flex-shrink: 0;
+}
+
+/* Toast notification */
+.moka-json-toast {
+    position: absolute;
+    top: 8px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 60;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 12px;
+    background: var(--moka-json-toolbar-bg, #f3f3f3);
+    border: 1px solid var(--moka-json-color-border, #e0e0e0);
+    border-radius: 4px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    font-size: var(--moka-json-font-size, 13px);
+    font-family: var(--moka-json-font-family, monospace);
+    color: var(--moka-json-color-text, #1e1e1e);
+    cursor: pointer;
+    max-width: 90%;
+    animation: moka-json-toast-in 0.2s ease-out;
+}
+
+.moka-json-toast-dismiss {
+    background: none;
+    border: none;
+    font-size: 16px;
+    line-height: 1;
+    cursor: pointer;
+    color: var(--moka-json-color-text, #1e1e1e);
+    opacity: 0.6;
+    padding: 0 2px;
+}
+
+.moka-json-toast-dismiss:hover {
+    opacity: 1;
+}
+
+@keyframes moka-json-toast-in {
+    from {
+        opacity: 0;
+        transform: translateX(-50%) translateY(-8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(-50%) translateY(0);
+    }
+}
+
+/* ---- Settings Panel ---- */
+.moka-json-settings-panel {
+    position: absolute;
+    right: 4px;
+    top: 100%;
+    margin-top: 2px;
+    z-index: 10000;
+    background: var(--moka-json-context-bg);
+    border: 1px solid var(--moka-json-color-border);
+    border-radius: 4px;
+    box-shadow: var(--moka-json-context-shadow);
+    width: 220px;
+    max-height: 50vh;
+    overflow-y: auto;
+    font-size: 11px;
+    padding-bottom: 4px;
+}
+
+.moka-json-settings-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 8px;
+    font-weight: 600;
+    font-size: 11px;
+    border-bottom: 1px solid var(--moka-json-color-border);
+    position: sticky;
+    top: 0;
+    background: var(--moka-json-context-bg);
+    z-index: 1;
+}
+
+.moka-json-settings-close {
+    background: none;
+    border: none;
+    font-size: 14px;
+    cursor: pointer;
+    color: var(--moka-json-color-text);
+    opacity: 0.5;
+    padding: 0 2px;
+    line-height: 1;
+}
+
+.moka-json-settings-close:hover {
+    opacity: 1;
+}
+
+.moka-json-settings-group {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--moka-json-color-null);
+    padding: 6px 8px 2px;
+}
+
+.moka-json-settings-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 2px 8px;
+    gap: 6px;
+    min-height: 22px;
+}
+
+.moka-json-settings-label {
+    color: var(--moka-json-color-text);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.moka-json-settings-radio {
+    display: inline-flex;
+    gap: 0;
+    border: 1px solid var(--moka-json-color-border);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.moka-json-settings-radio-opt {
+    padding: 1px 4px;
+    font-size: 10px;
+    cursor: pointer;
+    user-select: none;
+    border-right: 1px solid var(--moka-json-color-border);
+    transition: background 0.1s;
+    display: flex;
+    align-items: center;
+    gap: 0;
+}
+
+.moka-json-settings-radio-opt:last-child {
+    border-right: none;
+}
+
+.moka-json-settings-radio-opt:hover {
+    background: var(--moka-json-color-hover);
+}
+
+.moka-json-settings-radio-opt.selected {
+    background: var(--moka-json-color-selected);
+    font-weight: 600;
+}
+
+.moka-json-settings-radio-opt input[type="radio"] {
+    display: none;
+}
+
+.moka-json-settings-check {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    color: var(--moka-json-color-text);
+}
+
+.moka-json-settings-check input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+
+.moka-json-settings-select {
+    padding: 2px 6px;
+    border: 1px solid var(--moka-json-color-border);
+    border-radius: 4px;
+    background: var(--moka-json-context-bg);
+    color: var(--moka-json-color-text);
+    font-size: 11px;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.moka-json-settings-number {
+    width: 50px;
+    padding: 2px 6px;
+    border: 1px solid var(--moka-json-color-border);
+    border-radius: 4px;
+    background: var(--moka-json-context-bg);
+    color: var(--moka-json-color-text);
+    font-size: 11px;
+    font-family: inherit;
+    text-align: center;
+}
+
+/* Settings gear button subtle styling */
+.moka-json-toolbar-settings {
+    opacity: 0.6;
+    transition: opacity 0.15s;
+}
+
+.moka-json-toolbar-settings:hover {
+    opacity: 1;
 }

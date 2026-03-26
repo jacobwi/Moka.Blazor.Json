@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Components;
+using Moka.Blazor.Json.Components;
 using Moka.Blazor.Json.Models;
 
 namespace Moka.Blazor.Json.Demo.Components.Pages;
@@ -527,6 +528,18 @@ public sealed partial class Home : ComponentBase
 		};
 	}
 
+	#region 1. Toolbar mode & theme switcher
+
+	private MokaJsonToolbarMode _demoToolbarMode = MokaJsonToolbarMode.IconAndText;
+	private MokaJsonTheme _demoTheme = MokaJsonTheme.Light;
+
+	private static string ToolbarBtnStyle(bool selected) =>
+		selected
+			? "padding: 4px 12px; font-size: 13px; border: 1px solid #0ea5e9; background: #0ea5e9; color: #fff; border-radius: 4px; cursor: pointer; font-family: inherit;"
+			: "padding: 4px 12px; font-size: 13px; border: 1px solid #ddd; background: #fff; color: #333; border-radius: 4px; cursor: pointer; font-family: inherit;";
+
+	#endregion
+
 	#region 9. GeoJSON
 
 	private const string _geoJson = """
@@ -670,6 +683,8 @@ public sealed partial class Home : ComponentBase
 	private string _stressTestGenTime = "";
 	private int _stressTestNodeCount;
 	private long _stressTestSize;
+	private MokaJsonViewer? _stressTestViewer;
+	private bool _showDiagnostics;
 	private Stream? _stressTestStream;
 	private int _targetSizeMb = 50;
 

@@ -21,6 +21,12 @@ public sealed class MokaJsonContextAction
 	public string? IconCss { get; init; }
 
 	/// <summary>
+	///     Optional inline SVG markup for an icon displayed next to the label.
+	///     Takes precedence over <see cref="IconCss" /> when both are set.
+	/// </summary>
+	public string? IconSvg { get; init; }
+
+	/// <summary>
 	///     Keyboard shortcut hint displayed in the menu (e.g., "Ctrl+C").
 	/// </summary>
 	public string? ShortcutHint { get; init; }

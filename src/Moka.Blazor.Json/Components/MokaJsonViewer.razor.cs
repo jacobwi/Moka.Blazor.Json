@@ -30,6 +30,13 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		_disposed = true;
 
 		_searchDebounceTimer?.Dispose();
+		_toastTimer?.Dispose();
+
+		if (_treeCts is not null)
+		{
+			await _treeCts.CancelAsync();
+			_treeCts.Dispose();
+		}
 
 		if (_statsCts is not null)
 		{
@@ -37,7 +44,11 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			_statsCts.Dispose();
 		}
 
-		if (_documentManager is not null)
+		if (_documentSource is not null)
+		{
+			await _documentSource.DisposeAsync();
+		}
+		else if (_documentManager is not null)
 		{
 			await _documentManager.DisposeAsync();
 		}
@@ -175,10 +186,24 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	public bool WordWrap { get; set; } = true;
 
 	/// <summary>
+	///     How toolbar buttons are displayed. Overrides <see cref="MokaJsonViewerOptions.DefaultToolbarMode" />.
+	///     When <c>null</c>, the global default from DI is used.
+	/// </summary>
+	[Parameter]
+	public MokaJsonToolbarMode? ToolbarMode { get; set; }
+
+	/// <summary>
 	///     Extra content to render in the toolbar.
 	/// </summary>
 	[Parameter]
 	public RenderFragment? ToolbarExtra { get; set; }
+
+	/// <summary>
+	///     Whether the settings gear button is shown in the toolbar.
+	///     When <c>null</c>, the global default from DI (<see cref="MokaJsonViewerOptions.ShowSettingsButton" />) is used.
+	/// </summary>
+	[Parameter]
+	public bool? ShowSettingsButton { get; set; }
 
 	/// <summary>
 	///     Additional HTML attributes to apply to the root element.
@@ -192,6 +217,10 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	private ElementReference _viewerRef;
 	private JsonDocumentManager? _documentManager;
+#pragma warning disable CA1859 // Intentionally using interface to support future LazyJsonDocumentSource
+	private IJsonDocumentSource? _documentSource;
+#pragma warning restore CA1859
+	private bool _isLazyMode;
 	private readonly JsonTreeFlattener _treeFlattener = new();
 	private readonly JsonSearchEngine _searchEngine = new();
 	private MokaJsonContextMenu? _contextMenu;
@@ -221,6 +250,10 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	private MokaJsonNodeContext? _contextMenuNodeContext;
 	private List<MokaJsonContextAction> _allContextActions = [];
 
+	private bool _showSettings;
+	private double _settingsLeft;
+	private double _settingsTop;
+
 	private string? _documentSize;
 	private int _nodeCount;
 	private int _maxDepth;
@@ -229,17 +262,40 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	private string? _validationError;
 
 	private CancellationTokenSource? _statsCts;
+	private CancellationTokenSource? _treeCts;
 	private Timer? _searchDebounceTimer;
 	private bool _disposed;
+	private bool _isBusy;
+	private string? _busyMessage;
+	private string? _toastMessage;
+	private Timer? _toastTimer;
 
 	private InlineEditState? _activeEdit;
 	private EditHistory? _editHistory;
+
+	/// <summary>
+	///     Debug stats from the lazy source, set only when MOKA_DEBUG_LAZY env var is set.
+	///     Used by Moka.Blazor.Json.Diagnostics overlay.
+	/// </summary>
+	public LazyDebugStats? DebugStats { get; private set; }
 
 	#endregion
 
 	#region Computed Properties
 
 	private string HeightStyle => $"height: {Height}";
+
+	private MokaJsonToolbarMode EffectiveToolbarMode =>
+		ToolbarMode ?? OptionsAccessor.Value.DefaultToolbarMode;
+
+	private bool EffectiveShowSettingsButton =>
+		ShowSettingsButton ?? OptionsAccessor.Value.ShowSettingsButton;
+
+	/// <summary>
+	///     Effective read-only state: true if the ReadOnly parameter is set OR if the
+	///     document source doesn't support editing (lazy mode).
+	/// </summary>
+	private bool EffectiveReadOnly => ReadOnly || _documentSource is { SupportsEditing: false };
 
 	private string ThemeAttribute => Theme switch
 	{
@@ -287,55 +343,129 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 		try
 		{
-			if (_documentManager is not null)
+			if (_documentSource is not null)
+			{
+				await _documentSource.DisposeAsync();
+				_documentSource = null;
+			}
+			else if (_documentManager is not null)
 			{
 				await _documentManager.DisposeAsync();
 			}
 
-			var manager = new JsonDocumentManager(
-				LoggerFactory.CreateLogger<JsonDocumentManager>(),
-				OptionsAccessor);
+			_documentManager = null;
+			_isLazyMode = false;
+			DebugStats = null;
+
+			long lazyThreshold = OptionsAccessor.Value.LazyParsingThresholdBytes;
+			ILogger lazyLogger = LoggerFactory.CreateLogger<LazyJsonDocumentSource>();
 
 			if (!string.IsNullOrWhiteSpace(Json))
 			{
-				await manager.ParseAsync(Json);
+				string json = Json;
+				long byteCount = json.Length <= 1_000_000
+					? Encoding.UTF8.GetByteCount(json)
+					: await Task.Run(() => Encoding.UTF8.GetByteCount(json));
+
+				if (byteCount > OptionsAccessor.Value.MaxDocumentSizeBytes)
+				{
+					throw new InvalidOperationException(
+						$"Document size ({JsonDocumentManager.FormatBytes(byteCount)}) exceeds the maximum allowed size ({JsonDocumentManager.FormatBytes(OptionsAccessor.Value.MaxDocumentSizeBytes)}).");
+				}
+
+				if (byteCount > lazyThreshold)
+				{
+					LazyJsonDocumentSource lazySource = await LazyJsonDocumentSource.CreateFromStringAsync(
+						json, lazyLogger, OptionsAccessor.Value);
+					_documentSource = lazySource;
+					_isLazyMode = true;
+					DebugStats = lazySource.DebugStats;
+				}
+				else
+				{
+					var manager = new JsonDocumentManager(
+						LoggerFactory.CreateLogger<JsonDocumentManager>(),
+						OptionsAccessor);
+					await manager.ParseAsync(json);
+					_documentManager = manager;
+					_documentSource = manager;
+				}
 			}
 			else if (JsonStream is not null)
 			{
-				await manager.ParseAsync(JsonStream);
+				// Check size if seekable
+				if (JsonStream.CanSeek && JsonStream.Length > OptionsAccessor.Value.MaxDocumentSizeBytes)
+				{
+					throw new InvalidOperationException(
+						$"Document size ({JsonDocumentManager.FormatBytes(JsonStream.Length)}) exceeds the maximum allowed size ({JsonDocumentManager.FormatBytes(OptionsAccessor.Value.MaxDocumentSizeBytes)}).");
+				}
+
+				if (JsonStream.CanSeek && JsonStream.Length > lazyThreshold)
+				{
+					LazyJsonDocumentSource lazySource = await LazyJsonDocumentSource.CreateAsync(
+						JsonStream, lazyLogger, OptionsAccessor.Value);
+					_documentSource = lazySource;
+					_isLazyMode = true;
+					DebugStats = lazySource.DebugStats;
+				}
+				else
+				{
+					var manager = new JsonDocumentManager(
+						LoggerFactory.CreateLogger<JsonDocumentManager>(),
+						OptionsAccessor);
+					await manager.ParseAsync(JsonStream);
+					_documentManager = manager;
+					_documentSource = manager;
+
+					// If non-seekable stream ended up being large, lazy mode won't kick in.
+					// That's expected — we can't determine size without reading for non-seekable streams.
+				}
 			}
 			else
 			{
-				await manager.DisposeAsync();
 				_isLoading = false;
 				return;
 			}
 
-			_documentManager = manager;
-
-			switch (CollapseMode)
+			if (_documentSource is null)
 			{
-				case MokaJsonCollapseMode.Root:
-					_treeFlattener.ExpandToDepth(manager.RootElement, 0);
-					break;
-				case MokaJsonCollapseMode.Expanded:
-					_treeFlattener.ExpandAll(manager.RootElement);
-					break;
-				default:
-					_treeFlattener.ExpandToDepth(manager.RootElement, MaxDepthExpanded);
-					break;
+				_isLoading = false;
+				return;
 			}
 
-			_flatNodes = _treeFlattener.Flatten(manager.RootElement);
+			IJsonDocumentSource source = _documentSource;
 
-			_documentSize = JsonDocumentManager.FormatBytes(manager.DocumentSizeBytes);
-			_parseTimeMs = $"{manager.ParseTime.TotalMilliseconds:F1} ms";
+			int expandDepth = CollapseMode switch
+			{
+				MokaJsonCollapseMode.Root => 0,
+				MokaJsonCollapseMode.Expanded => -1,
+				_ => MaxDepthExpanded
+			};
+
+			// Offload tree expansion and flattening to a background thread for large documents
+			// so the UI remains responsive during initial load.
+			if (source.DocumentSizeBytes >= OptionsAccessor.Value.BackgroundStatsThresholdBytes)
+			{
+				_flatNodes = await Task.Run(() =>
+				{
+					_treeFlattener.ExpandToDepth(source, expandDepth);
+					return _treeFlattener.Flatten(source);
+				});
+			}
+			else
+			{
+				_treeFlattener.ExpandToDepth(source, expandDepth);
+				_flatNodes = _treeFlattener.Flatten(source);
+			}
+
+			_documentSize = JsonDocumentManager.FormatBytes(source.DocumentSizeBytes);
+			_parseTimeMs = $"{source.ParseTime.TotalMilliseconds:F1} ms";
 
 			// For large documents, defer expensive stats to a background thread
-			if (manager.DocumentSizeBytes < OptionsAccessor.Value.BackgroundStatsThresholdBytes)
+			if (source.DocumentSizeBytes < OptionsAccessor.Value.BackgroundStatsThresholdBytes)
 			{
-				_nodeCount = manager.CountNodes();
-				_maxDepth = manager.GetMaxDepth();
+				_nodeCount = source.CountNodes();
+				_maxDepth = source.GetMaxDepth();
 			}
 			else
 			{
@@ -355,8 +485,8 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 						return;
 					}
 
-					int nc = manager.CountNodes();
-					int md = manager.GetMaxDepth();
+					int nc = source.CountNodes();
+					int md = source.GetMaxDepth();
 					if (cts.Token.IsCancellationRequested)
 					{
 						return;
@@ -380,6 +510,9 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			_validationError = null;
 			_isLoaded = true;
 			_isLoading = false;
+
+			// Rebuild context actions since EffectiveReadOnly may have changed
+			BuildContextActions();
 		}
 		catch (JsonException ex)
 		{
@@ -409,7 +542,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	private void RefreshFlatNodes()
 	{
-		if (!_isLoaded || _documentManager is null)
+		if (!_isLoaded || _documentSource is null)
 		{
 			return;
 		}
@@ -418,21 +551,66 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		{
 			try
 			{
-				JsonElement scopedElement = _documentManager.NavigateToElement(_scopedPath);
-				_flatNodes = _treeFlattener.FlattenScoped(scopedElement, _scopedPath);
+				_flatNodes = _treeFlattener.FlattenScoped(_documentSource, _scopedPath);
 			}
 			catch (KeyNotFoundException)
 			{
 				// Scoped path no longer valid, reset to root
 				_scopedPath = null;
-				_flatNodes = _treeFlattener.Flatten(_documentManager.RootElement);
+				_flatNodes = _treeFlattener.Flatten(_documentSource);
 			}
 		}
 		else
 		{
-			_flatNodes = _treeFlattener.Flatten(_documentManager.RootElement);
+			_flatNodes = _treeFlattener.Flatten(_documentSource);
 		}
 
+		StateHasChanged();
+	}
+
+	private async Task RefreshFlatNodesAsync()
+	{
+		if (!_isLoaded || _documentSource is null)
+		{
+			return;
+		}
+
+		IJsonDocumentSource source = _documentSource;
+		string? scopedPath = _scopedPath;
+
+		List<FlattenedJsonNode> nodes;
+		try
+		{
+			nodes = await Task.Run(() =>
+			{
+				if (scopedPath is not null)
+				{
+					try
+					{
+						return _treeFlattener.FlattenScoped(source, scopedPath);
+					}
+					catch (KeyNotFoundException)
+					{
+						return _treeFlattener.Flatten(source);
+					}
+				}
+
+				return _treeFlattener.Flatten(source);
+			});
+		}
+		catch (ObjectDisposedException)
+		{
+			// Source was disposed by a concurrent operation (e.g., new document loaded) — ignore
+			return;
+		}
+
+		// If scoped path was invalid, reset it on the UI thread
+		if (scopedPath is not null && nodes.Count > 0 && nodes[0].Path != scopedPath)
+		{
+			_scopedPath = null;
+		}
+
+		_flatNodes = nodes;
 		StateHasChanged();
 	}
 
@@ -452,57 +630,141 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		}
 	}
 
-	private void HandleExpandAll()
+	private async Task HandleExpandAll()
 	{
-		if (_documentManager is null)
+		if (_documentSource is null)
 		{
 			return;
 		}
 
-		_treeFlattener.ExpandAll(_documentManager.RootElement);
-		RefreshFlatNodes();
+		IJsonDocumentSource source = _documentSource;
+		bool isLarge = source.DocumentSizeBytes >= OptionsAccessor.Value.BackgroundStatsThresholdBytes;
+
+		if (isLarge)
+		{
+			// Cancel any in-flight tree operation
+			await CancelTreeOperationAsync();
+			_isBusy = true;
+			_busyMessage = "Expanding all nodes...";
+			StateHasChanged();
+
+			CancellationTokenSource cts = _treeCts = new CancellationTokenSource();
+			try
+			{
+				await Task.Run(() => _treeFlattener.ExpandAll(source), cts.Token);
+				if (!cts.Token.IsCancellationRequested)
+				{
+					await RefreshFlatNodesAsync();
+				}
+			}
+			catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+			{
+			}
+			finally
+			{
+				if (_treeCts == cts)
+				{
+					_isBusy = false;
+					_busyMessage = null;
+					StateHasChanged();
+				}
+			}
+		}
+		else
+		{
+			_treeFlattener.ExpandAll(source);
+			RefreshFlatNodes();
+		}
 	}
 
-	private void HandleCollapseAll()
+	private async Task HandleCollapseAll()
 	{
-		if (_documentManager is null)
+		if (_documentSource is null)
 		{
 			return;
 		}
 
-		_treeFlattener.ExpandToDepth(_documentManager.RootElement, 0);
-		RefreshFlatNodes();
+		IJsonDocumentSource source = _documentSource;
+		bool isLarge = source.DocumentSizeBytes >= OptionsAccessor.Value.BackgroundStatsThresholdBytes;
+
+		if (isLarge)
+		{
+			// Cancel any in-flight tree operation
+			await CancelTreeOperationAsync();
+			_isBusy = true;
+			_busyMessage = "Collapsing...";
+			StateHasChanged();
+
+			CancellationTokenSource cts = _treeCts = new CancellationTokenSource();
+			try
+			{
+				await Task.Run(() => _treeFlattener.ExpandToDepth(source, 0), cts.Token);
+				if (!cts.Token.IsCancellationRequested)
+				{
+					await RefreshFlatNodesAsync();
+				}
+			}
+			catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+			{
+			}
+			finally
+			{
+				if (_treeCts == cts)
+				{
+					_isBusy = false;
+					_busyMessage = null;
+					StateHasChanged();
+				}
+			}
+		}
+		else
+		{
+			_treeFlattener.ExpandToDepth(source, 0);
+			RefreshFlatNodes();
+		}
+	}
+
+	private async Task CancelTreeOperationAsync()
+	{
+		if (_treeCts is not null)
+		{
+			await _treeCts.CancelAsync();
+			_treeCts.Dispose();
+			_treeCts = null;
+			_isBusy = false;
+			_busyMessage = null;
+		}
 	}
 
 	private void HandleFormatToggle() => _isFormatted = !_isFormatted;
 
 	private async Task HandleCopyAll()
 	{
-		if (_documentManager is null)
+		if (_documentSource is null)
 		{
 			return;
 		}
 
 		// Guard against OOM for very large documents
-		if (_documentManager.DocumentSizeBytes > OptionsAccessor.Value.MaxClipboardSizeBytes)
+		if (_documentSource.DocumentSizeBytes > OptionsAccessor.Value.MaxClipboardSizeBytes)
 		{
-			_errorMessage = "Document too large to copy to clipboard. Use scoping to copy smaller sections.";
-			StateHasChanged();
+			ShowToast(
+				"Document too large to copy. Right-click a node and use \"Scope to This Node\" to copy smaller sections.");
 			return;
 		}
 
-		string json = _documentManager.GetJsonString(_isFormatted);
+		string json = _documentSource.GetJsonString(_isFormatted);
 		await Interop.CopyToClipboardAsync(json);
 	}
 
 	private async Task HandleExport()
 	{
-		if (_documentManager is null)
+		if (_documentSource is null)
 		{
 			return;
 		}
 
-		string json = _documentManager.GetJsonString(_isFormatted);
+		string json = _documentSource.GetJsonString(_isFormatted);
 		string fileName = $"export-{DateTime.Now:yyyyMMdd-HHmmss}.json";
 		await Interop.DownloadFileAsync(fileName, json);
 	}
@@ -569,7 +831,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	private void ExecuteSearch()
 	{
-		if (_documentManager is null || string.IsNullOrEmpty(_searchQuery))
+		if (_documentSource is null || string.IsNullOrEmpty(_searchQuery))
 		{
 			_searchEngine.Clear();
 			_treeFlattener.ClearSearchMatches();
@@ -583,7 +845,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			UseRegex = _searchUseRegex
 		};
 
-		_searchEngine.Search(_documentManager.RootElement, _searchQuery, options);
+		_searchEngine.Search(_documentSource, _searchQuery, options);
 
 		if (_searchEngine.ActiveMatchPath is not null)
 		{
@@ -598,26 +860,61 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	#region Tree Interaction Handlers
 
-	private void HandleToggle(string path)
+	private async Task HandleToggle(string path)
 	{
+		if (_documentSource is null)
+		{
+			return;
+		}
+
+		bool isLarge = _documentSource.DocumentSizeBytes >= OptionsAccessor.Value.BackgroundStatsThresholdBytes;
 		_treeFlattener.ToggleExpand(path);
-		RefreshFlatNodes();
+
+		if (isLarge)
+		{
+			_isBusy = true;
+			_busyMessage = "Loading...";
+			StateHasChanged();
+
+			try
+			{
+				await RefreshFlatNodesAsync();
+			}
+			catch (ObjectDisposedException)
+			{
+			}
+			finally
+			{
+				_isBusy = false;
+				_busyMessage = null;
+				StateHasChanged();
+			}
+		}
+		else
+		{
+			RefreshFlatNodes();
+		}
 	}
 
 	private async Task HandleSelect(string path)
 	{
 		SelectedPath = path;
 
-		if (_documentManager is not null)
+		if (_documentSource is not null)
 		{
 			try
 			{
-				JsonElement element = _documentManager.NavigateToElement(path);
+				JsonElement element = _documentSource.GetElement(path);
 				string[] segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 				_selectedDepth = segments.Length;
 				string? propName = segments.Length > 0 ? segments[^1].Replace("~1", "/").Replace("~0", "~") : null;
 
-				string rawText = element.GetRawText();
+				bool isContainer = element.ValueKind is JsonValueKind.Object or JsonValueKind.Array;
+				string rawText = isContainer ? "" : element.GetRawText();
+				string preview = isContainer
+					? $"{_documentSource.GetChildCount(path)} items"
+					: TruncatePreview(rawText);
+
 				await OnNodeSelected.InvokeAsync(new JsonNodeSelectedEventArgs
 				{
 					Path = path,
@@ -625,7 +922,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 					ValueKind = element.ValueKind,
 					PropertyName = propName,
 					RawValue = rawText,
-					RawValuePreview = TruncatePreview(rawText)
+					RawValuePreview = preview
 				});
 			}
 			catch (KeyNotFoundException)
@@ -639,18 +936,25 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	private async Task HandleContextMenuRequest((string Path, double ClientX, double ClientY) args)
 	{
-		if (_documentManager is null)
+		if (_documentSource is null)
 		{
 			return;
 		}
 
 		try
 		{
-			JsonElement element = _documentManager.NavigateToElement(args.Path);
+			JsonElement element = _documentSource.GetElement(args.Path);
 			string[] segments = args.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 			string? propName = segments.Length > 0 ? segments[^1].Replace("~1", "/").Replace("~0", "~") : null;
 
-			string rawText = element.GetRawText();
+			// For containers, defer GetRawText — serializing a large subtree just to
+			// populate the context menu is wasteful. Copy Value will fetch on demand.
+			bool isContainer = element.ValueKind is JsonValueKind.Object or JsonValueKind.Array;
+			string rawText = isContainer ? "" : element.GetRawText();
+			string preview = isContainer
+				? $"{_documentSource.GetChildCount(args.Path)} items"
+				: TruncatePreview(rawText);
+
 			_contextMenuNodeContext = new MokaJsonNodeContext
 			{
 				Path = args.Path,
@@ -658,7 +962,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 				ValueKind = element.ValueKind,
 				PropertyName = propName,
 				RawValue = rawText,
-				RawValuePreview = TruncatePreview(rawText),
+				RawValuePreview = preview,
 				Viewer = this
 			};
 
@@ -677,7 +981,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	private void HandleDoubleClick(string path)
 	{
-		if (ReadOnly || _documentManager is null)
+		if (EffectiveReadOnly || _documentManager is null)
 		{
 			return;
 		}
@@ -914,6 +1218,65 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		StateHasChanged();
 	}
 
+	#region Settings Panel
+
+	private void ToggleSettings()
+	{
+		_showSettings = !_showSettings;
+		if (_showSettings)
+		{
+			// Position below the toolbar, aligned right
+			_settingsLeft = 0;
+			_settingsTop = 0;
+		}
+	}
+
+	private void DismissSettings()
+	{
+		_showSettings = false;
+		StateHasChanged();
+	}
+
+	private void HandleSettingsThemeChanged(MokaJsonTheme value) => Theme = value;
+
+	private void HandleSettingsToolbarModeChanged(MokaJsonToolbarMode value) =>
+		ToolbarMode = value;
+
+	private void HandleSettingsToggleStyleChanged(MokaJsonToggleStyle value) =>
+		ToggleStyle = value;
+
+	private void HandleSettingsToggleSizeChanged(MokaJsonToggleSize value) =>
+		ToggleSize = value;
+
+	private void HandleSettingsShowLineNumbersChanged(bool value) =>
+		ShowLineNumbers = value;
+
+	private void HandleSettingsWordWrapChanged(bool value) =>
+		WordWrap = value;
+
+	private void HandleSettingsShowBreadcrumbChanged(bool value) =>
+		ShowBreadcrumb = value;
+
+	private void HandleSettingsShowBottomBarChanged(bool value) =>
+		ShowBottomBar = value;
+
+	private void HandleSettingsMaxDepthChanged(int value) =>
+		MaxDepthExpanded = value;
+
+	private void HandleSettingsCollapseModeChanged(MokaJsonCollapseMode value) =>
+		CollapseMode = value;
+
+	private void HandleSettingsReadOnlyChanged(bool value) =>
+		ReadOnly = value;
+
+	private void HandleSettingsSearchCaseSensitiveChanged(bool value) =>
+		_searchCaseSensitive = value;
+
+	private void HandleSettingsSearchUseRegexChanged(bool value) =>
+		_searchUseRegex = value;
+
+	#endregion
+
 	private async Task HandleBreadcrumbNavigate(string path)
 	{
 		// If clicking root or a path above the current scope, unscope
@@ -934,11 +1297,11 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		{
 			ToggleSearch();
 		}
-		else if (e is { CtrlKey: true, Key: "z" } && !ReadOnly)
+		else if (e is { CtrlKey: true, Key: "z" } && !EffectiveReadOnly)
 		{
 			Undo();
 		}
-		else if (e is { CtrlKey: true, Key: "y" } && !ReadOnly)
+		else if (e is { CtrlKey: true, Key: "y" } && !EffectiveReadOnly)
 		{
 			Redo();
 		}
@@ -956,14 +1319,40 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			{
 				Id = "copy-value",
 				Label = "Copy Value",
+				IconSvg = MokaJsonIcons.SvgString(MokaJsonIcons.Copy),
 				ShortcutHint = "Ctrl+C",
 				Order = 10,
-				OnExecute = async ctx => await Interop.CopyToClipboardAsync(ctx.RawValue)
+				OnExecute = async ctx =>
+				{
+					string value = ctx.RawValue;
+					if (string.IsNullOrEmpty(value) && _documentSource is not null)
+					{
+						// Deferred for large containers — serialize on background thread
+						try
+						{
+							value = await Task.Run(() => _documentSource.GetElement(ctx.Path).GetRawText());
+						}
+						catch (OutOfMemoryException)
+						{
+							ShowToast("Value too large to copy. Use \"Scope to This Node\" to copy smaller sections.");
+							return;
+						}
+					}
+
+					if (value.Length > OptionsAccessor.Value.MaxClipboardSizeBytes)
+					{
+						ShowToast("Value too large to copy. Use \"Scope to This Node\" to copy smaller sections.");
+						return;
+					}
+
+					await Interop.CopyToClipboardAsync(value);
+				}
 			},
 			new MokaJsonContextAction
 			{
 				Id = "copy-path",
 				Label = "Copy Path",
+				IconSvg = MokaJsonIcons.SvgString(MokaJsonIcons.CopyPath),
 				Order = 20,
 				OnExecute = async ctx => await Interop.CopyToClipboardAsync(JsonPathConverter.ToDotNotation(ctx.Path))
 			},
@@ -971,19 +1360,17 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			{
 				Id = "expand-children",
 				Label = "Expand All Children",
+				IconSvg = MokaJsonIcons.SvgString(MokaJsonIcons.Expand),
 				Order = 100,
 				HasSeparatorBefore = true,
 				IsVisible = ctx => ctx.ValueKind is JsonValueKind.Object or JsonValueKind.Array,
-				OnExecute = ctx =>
-				{
-					ExpandSubtree(ctx.Path);
-					return ValueTask.CompletedTask;
-				}
+				OnExecute = async ctx => await ExpandSubtree(ctx.Path)
 			},
 			new MokaJsonContextAction
 			{
 				Id = "collapse-children",
 				Label = "Collapse All Children",
+				IconSvg = MokaJsonIcons.SvgString(MokaJsonIcons.Collapse),
 				Order = 110,
 				IsVisible = ctx => ctx.ValueKind is JsonValueKind.Object or JsonValueKind.Array,
 				OnExecute = ctx =>
@@ -996,6 +1383,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			{
 				Id = "scope-to-node",
 				Label = "Scope to This Node",
+				IconSvg = MokaJsonIcons.SvgString(MokaJsonIcons.Scope),
 				Order = 200,
 				HasSeparatorBefore = true,
 				IsVisible = ctx => ctx.ValueKind is JsonValueKind.Object or JsonValueKind.Array,
@@ -1009,6 +1397,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			{
 				Id = "sort-keys",
 				Label = "Sort Keys",
+				IconSvg = MokaJsonIcons.SvgString(MokaJsonIcons.Sort),
 				Order = 300,
 				HasSeparatorBefore = true,
 				IsVisible = ctx => ctx.ValueKind is JsonValueKind.Object,
@@ -1018,18 +1407,20 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			{
 				Id = "sort-keys-recursive",
 				Label = "Sort Keys (Recursive)",
+				IconSvg = MokaJsonIcons.SvgString(MokaJsonIcons.Sort),
 				Order = 310,
 				IsVisible = ctx => ctx.ValueKind is JsonValueKind.Object,
 				OnExecute = async ctx => await SortKeysAtPath(ctx.Path, true)
 			}
 		];
 
-		if (!ReadOnly)
+		if (!EffectiveReadOnly)
 		{
 			_allContextActions.Add(new MokaJsonContextAction
 			{
 				Id = "edit-value",
 				Label = "Edit Value",
+				IconSvg = MokaJsonIcons.SvgString(MokaJsonIcons.Edit),
 				ShortcutHint = "Dbl-click",
 				Order = 400,
 				HasSeparatorBefore = true,
@@ -1044,6 +1435,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			{
 				Id = "rename-key",
 				Label = "Rename Key",
+				IconSvg = MokaJsonIcons.SvgString(MokaJsonIcons.Rename),
 				ShortcutHint = "F2",
 				Order = 410,
 				IsVisible = ctx => ctx.PropertyName is not null,
@@ -1057,6 +1449,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			{
 				Id = "delete-node",
 				Label = "Delete",
+				IconSvg = MokaJsonIcons.SvgString(MokaJsonIcons.Delete),
 				ShortcutHint = "Del",
 				Order = 420,
 				IsVisible = ctx => !string.IsNullOrEmpty(ctx.Path) && ctx.Path != "/",
@@ -1066,6 +1459,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			{
 				Id = "add-property",
 				Label = "Add Property",
+				IconSvg = MokaJsonIcons.SvgString(MokaJsonIcons.Add),
 				Order = 430,
 				IsVisible = ctx => ctx.ValueKind == JsonValueKind.Object,
 				OnExecute = async ctx => await AddPropertyAtPath(ctx.Path)
@@ -1074,6 +1468,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			{
 				Id = "add-element",
 				Label = "Add Element",
+				IconSvg = MokaJsonIcons.SvgString(MokaJsonIcons.Add),
 				Order = 440,
 				IsVisible = ctx => ctx.ValueKind == JsonValueKind.Array,
 				OnExecute = async ctx => await AddElementAtPath(ctx.Path)
@@ -1088,20 +1483,20 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	private async Task SortKeysAtPath(string path, bool recursive)
 	{
-		if (_documentManager is null)
+		if (_documentSource is null || _documentManager is null)
 		{
 			return;
 		}
 
 		try
 		{
-			JsonElement element = _documentManager.NavigateToElement(path);
+			JsonElement element = _documentSource.GetElement(path);
 			if (element.ValueKind != JsonValueKind.Object)
 			{
 				return;
 			}
 
-			if (!ReadOnly)
+			if (!EffectiveReadOnly)
 			{
 				_editHistory ??= new EditHistory();
 				_editHistory.PushSnapshot(_documentManager.GetJsonString());
@@ -1136,7 +1531,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	private string ReplaceSubtreeJson(string path, string newSubtreeJson)
 	{
-		if (_documentManager is null)
+		if (_documentSource is null)
 		{
 			return newSubtreeJson;
 		}
@@ -1148,7 +1543,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		}
 
 		// Rebuild the full document with the sorted subtree inserted at the given path
-		JsonElement rootElement = _documentManager.RootElement;
+		JsonElement rootElement = _documentSource.GetElement("");
 		using var stream = new MemoryStream();
 		using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
 
@@ -1228,7 +1623,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	private void ScopeToNode(string path)
 	{
-		if (_documentManager is null)
+		if (_documentSource is null)
 		{
 			return;
 		}
@@ -1236,8 +1631,8 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		try
 		{
 			// Verify the path is valid
-			JsonElement element = _documentManager.NavigateToElement(path);
-			if (element.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
+			JsonValueKind kind = _documentSource.GetValueKind(path);
+			if (kind is not (JsonValueKind.Object or JsonValueKind.Array))
 			{
 				return;
 			}
@@ -1257,48 +1652,74 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		RefreshFlatNodes();
 	}
 
-	private void ExpandSubtree(string path)
+	private async Task ExpandSubtree(string path)
 	{
-		if (_documentManager is null)
+		if (_documentSource is null)
 		{
 			return;
 		}
 
-		try
+		IJsonDocumentSource source = _documentSource;
+		bool isLarge = source.DocumentSizeBytes >= OptionsAccessor.Value.BackgroundStatsThresholdBytes;
+
+		if (isLarge)
 		{
-			JsonElement element = _documentManager.NavigateToElement(path);
-			ExpandSubtreeRecursive(element, path);
-			RefreshFlatNodes();
+			await CancelTreeOperationAsync();
+			_isBusy = true;
+			_busyMessage = "Expanding subtree...";
+			StateHasChanged();
+
+			CancellationTokenSource cts = _treeCts = new CancellationTokenSource();
+			try
+			{
+				await Task.Run(() => ExpandSubtreeRecursive(source, path), cts.Token);
+				if (!cts.Token.IsCancellationRequested)
+				{
+					await RefreshFlatNodesAsync();
+				}
+			}
+			catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException
+				                           or KeyNotFoundException)
+			{
+			}
+			finally
+			{
+				if (_treeCts == cts)
+				{
+					_isBusy = false;
+					_busyMessage = null;
+					StateHasChanged();
+				}
+			}
 		}
-		catch (KeyNotFoundException)
+		else
 		{
+			try
+			{
+				ExpandSubtreeRecursive(source, path);
+				RefreshFlatNodes();
+			}
+			catch (KeyNotFoundException)
+			{
+			}
 		}
 	}
 
-	private void ExpandSubtreeRecursive(JsonElement element, string path)
+	private void ExpandSubtreeRecursive(IJsonDocumentSource source, string path)
 	{
-		if (element.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
+		JsonValueKind kind = source.GetValueKind(path);
+		if (kind is not (JsonValueKind.Object or JsonValueKind.Array))
 		{
 			return;
 		}
 
 		_treeFlattener.Expand(path);
 
-		if (element.ValueKind == JsonValueKind.Object)
+		foreach (JsonChildDescriptor child in source.EnumerateChildren(path))
 		{
-			foreach (JsonProperty prop in element.EnumerateObject())
+			if (child.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
 			{
-				string childPath = $"{path}/{EscapeJsonPointer(prop.Name)}";
-				ExpandSubtreeRecursive(prop.Value, childPath);
-			}
-		}
-		else
-		{
-			int i = 0;
-			foreach (JsonElement item in element.EnumerateArray())
-			{
-				ExpandSubtreeRecursive(item, $"{path}/{i}");
-				i++;
+				ExpandSubtreeRecursive(source, child.Path);
 			}
 		}
 	}
@@ -1337,8 +1758,32 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		}
 	}
 
+	private void ShowToast(string message, int durationMs = 5000)
+	{
+		_toastTimer?.Dispose();
+		_toastMessage = message;
+		StateHasChanged();
+		_toastTimer = new Timer(_ =>
+		{
+			_ = InvokeAsync(() =>
+			{
+				_toastMessage = null;
+				StateHasChanged();
+			});
+		}, null, durationMs, Timeout.Infinite);
+	}
+
+	private void DismissToast()
+	{
+		_toastTimer?.Dispose();
+		_toastTimer = null;
+		_toastMessage = null;
+		StateHasChanged();
+	}
+
 	private static string TruncatePreview(string raw, int maxLength = 500) =>
 		raw.Length > maxLength ? raw[..maxLength] + "..." : raw;
+
 
 	private static string EscapeJsonPointer(string segment) => segment.Replace("~", "~0").Replace("/", "~1");
 
@@ -1363,18 +1808,18 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		ArgumentNullException.ThrowIfNull(jsonPointer);
 		EnsurePathExpanded(jsonPointer);
 		await HandleSelect(jsonPointer);
-		RefreshFlatNodes();
+		await RefreshFlatNodesAsync();
 	}
 
 	/// <inheritdoc />
 	public void ExpandToDepth(int depth)
 	{
-		if (_documentManager is null)
+		if (_documentSource is null)
 		{
 			return;
 		}
 
-		_treeFlattener.ExpandToDepth(_documentManager.RootElement, depth);
+		_treeFlattener.ExpandToDepth(_documentSource, depth);
 		RefreshFlatNodes();
 	}
 
@@ -1386,18 +1831,18 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	}
 
 	/// <inheritdoc />
-	public void ExpandAll() => HandleExpandAll();
+	public async void ExpandAll() => await HandleExpandAll();
 
 	/// <inheritdoc />
 	public async ValueTask<int> SearchAsync(string query, JsonSearchOptions? options = null,
 		CancellationToken cancellationToken = default)
 	{
-		if (_documentManager is null)
+		if (_documentSource is null)
 		{
 			return 0;
 		}
 
-		return _searchEngine.Search(_documentManager.RootElement, query, options, cancellationToken);
+		return _searchEngine.Search(_documentSource, query, options, cancellationToken);
 	}
 
 	/// <inheritdoc />
@@ -1417,7 +1862,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	/// <inheritdoc />
 	public async void Undo()
 	{
-		if (ReadOnly || _editHistory is null || !_editHistory.CanUndo)
+		if (EffectiveReadOnly || _editHistory is null || !_editHistory.CanUndo)
 		{
 			return;
 		}
@@ -1437,7 +1882,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	/// <inheritdoc />
 	public async void Redo()
 	{
-		if (ReadOnly || _editHistory is null || !_editHistory.CanRedo)
+		if (EffectiveReadOnly || _editHistory is null || !_editHistory.CanRedo)
 		{
 			return;
 		}
@@ -1455,7 +1900,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	}
 
 	/// <inheritdoc />
-	public string GetJson(bool indented = true) => _documentManager?.GetJsonString(indented) ?? string.Empty;
+	public string GetJson(bool indented = true) => _documentSource?.GetJsonString(indented) ?? string.Empty;
 
 	/// <inheritdoc />
 	public string? SelectedPath { get; private set; }

@@ -1,15 +1,82 @@
 @namespace Moka.Blazor.Json.Components
 
 <div class="moka-json-toolbar">
-	<button @onclick="OnSearchToggle" title="Search (Ctrl+F)">Search</button>
+	<button @onclick="OnSearchToggle" title="Search (Ctrl+F)" disabled="@IsBusy"
+	        aria-label="@(ShowText ? null : "Search")">
+		@if (ShowIcon)
+		{
+			@MokaJsonIcons.Search
+		}
+		@if (ShowText)
+		{
+			<span>Search</span>
+		}
+	</button>
 	<span class="moka-json-toolbar-separator"></span>
-	<button @onclick="OnExpandAll" title="Expand All">Expand</button>
-	<button @onclick="OnCollapseAll" title="Collapse All">Collapse</button>
+	<button @onclick="OnExpandAll" title="Expand All" disabled="@IsBusy"
+	        aria-label="@(ShowText ? null : "Expand All")">
+		@if (ShowIcon)
+		{
+			@MokaJsonIcons.Expand
+		}
+		@if (ShowText)
+		{
+			<span>Expand</span>
+		}
+	</button>
+	<button @onclick="OnCollapseAll" title="Collapse All" disabled="@IsBusy"
+	        aria-label="@(ShowText ? null : "Collapse All")">
+		@if (ShowIcon)
+		{
+			@MokaJsonIcons.Collapse
+		}
+		@if (ShowText)
+		{
+			<span>Collapse</span>
+		}
+	</button>
 	<span class="moka-json-toolbar-separator"></span>
-	<button @onclick="OnFormatToggle" title="Toggle Format">@(IsFormatted ? "Minify" : "Format")</button>
-	<button @onclick="OnCopyAll" title="Copy All">Copy</button>
-	<button @onclick="OnExport" title="Export JSON">Export</button>
+	<button @onclick="OnFormatToggle" title="Toggle Format" disabled="@IsBusy"
+	        aria-label="@(ShowText ? null : IsFormatted ? "Minify" : "Format")">
+		@if (ShowIcon)
+		{
+			@(IsFormatted ? MokaJsonIcons.Minify : MokaJsonIcons.Format)
+		}
+		@if (ShowText)
+		{
+			<span>@(IsFormatted ? "Minify" : "Format")</span>
+		}
+	</button>
+	<button @onclick="OnCopyAll" title="Copy All" disabled="@IsBusy"
+	        aria-label="@(ShowText ? null : "Copy All")">
+		@if (ShowIcon)
+		{
+			@MokaJsonIcons.Copy
+		}
+		@if (ShowText)
+		{
+			<span>Copy</span>
+		}
+	</button>
+	<button @onclick="OnExport" title="Export JSON" disabled="@IsBusy"
+	        aria-label="@(ShowText ? null : "Export")">
+		@if (ShowIcon)
+		{
+			@MokaJsonIcons.Export
+		}
+		@if (ShowText)
+		{
+			<span>Export</span>
+		}
+	</button>
 	<span class="moka-json-toolbar-spacer"></span>
+	@if (ShowSettingsButton)
+	{
+		<button @onclick="OnSettingsToggle" title="Settings"
+		        aria-label="Settings" class="moka-json-toolbar-settings">
+			@MokaJsonIcons.Settings
+		</button>
+	}
 	@if (ToolbarExtra is not null)
 	{
 		@ToolbarExtra

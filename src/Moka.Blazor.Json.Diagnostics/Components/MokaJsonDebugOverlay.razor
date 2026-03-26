@@ -1,0 +1,79 @@
+@namespace Moka.Blazor.Json.Diagnostics.Components
+
+@if (Enabled && Stats is not null)
+{
+	<div class="moka-json-debug-overlay">
+		<link href="_content/Moka.Blazor.Json/css/moka-json.css" rel="stylesheet"/>
+
+		<div class="moka-json-debug-title">Lazy Parsing Diagnostics</div>
+
+		@* Coverage bar — unique bytes parsed vs total *@
+		<div class="moka-json-debug-bar-container">
+			<div class="moka-json-debug-bar-fill" style="width: @($"{Math.Min(Stats.CoveragePercent, 100):F1}%")"></div>
+		</div>
+		<div class="moka-json-debug-row">
+			<span>Coverage:</span>
+			<span>@FormatBytes(Stats.UniqueBytesParsed) / @FormatBytes(Stats.TotalBytes) (@($"{Stats.CoveragePercent:F1}")%)</span>
+		</div>
+
+		<div class="moka-json-debug-divider"></div>
+
+		@* Parse stats *@
+		<div class="moka-json-debug-section-title">Parsing</div>
+		<div class="moka-json-debug-row">
+			<span>Subtree parses:</span>
+			<span>@Stats.SubtreeParseCount</span>
+		</div>
+		<div class="moka-json-debug-row">
+			<span>Cumulative I/O:</span>
+			<span>@FormatBytes(Stats.CumulativeBytesParsed)</span>
+		</div>
+		@if (Stats.SubtreeParseCount > 0)
+		{
+			<div class="moka-json-debug-row">
+				<span>Parse time:</span>
+				<span>@FormatMs(Stats.AvgParseTime) avg / @FormatMs(Stats.MaxParseTime) max</span>
+			</div>
+		}
+
+		<div class="moka-json-debug-divider"></div>
+
+		@* Cache stats *@
+		<div class="moka-json-debug-section-title">Cache</div>
+		<div class="moka-json-debug-row">
+			<span>Hits / Misses:</span>
+			<span>@Stats.CacheHits / @Stats.CacheMisses</span>
+		</div>
+		<div class="moka-json-debug-row">
+			<span>Hit rate:</span>
+			<span class="@CacheHitRateClass">@($"{Stats.CacheHitRate:F0}")%</span>
+		</div>
+
+		<div class="moka-json-debug-divider"></div>
+
+		@* Index stats *@
+		<div class="moka-json-debug-section-title">Index</div>
+		<div class="moka-json-debug-row">
+			<span>Entries:</span>
+			<span>@Stats.IndexEntries.ToString("N0")</span>
+		</div>
+		<div class="moka-json-debug-row">
+			<span>Lazy expansions:</span>
+			<span>@Stats.LazyIndexOps</span>
+		</div>
+
+		@* Recent parses *@
+		@if (Stats.RecentParses.Count > 0)
+		{
+			<div class="moka-json-debug-divider"></div>
+			<div class="moka-json-debug-section-title">Recent Parses</div>
+			@foreach (var entry in Stats.RecentParses.AsEnumerable().Reverse().Take(6))
+			{
+				<div class="moka-json-debug-parse-entry">
+					<span class="moka-json-debug-parse-path">@TruncatePath(entry.Path)</span>
+					<span class="moka-json-debug-parse-meta">@FormatBytes(entry.Bytes) @FormatMs(entry.Duration)</span>
+				</div>
+			}
+		}
+	</div>
+}

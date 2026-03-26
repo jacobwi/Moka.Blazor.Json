@@ -1,3 +1,7 @@
+---
+title: "Edit Mode"
+---
+
 # Edit Mode
 
 Set `ReadOnly="false"` to enable inline editing of JSON documents.

@@ -10,6 +10,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Moka.Blazor.Json\Moka.Blazor.Json.csproj" />
+    <ProjectReference Include="..\..\src\Moka.Blazor.Json.Diagnostics\Moka.Blazor.Json.Diagnostics.csproj" />
   </ItemGroup>
 
 </Project>

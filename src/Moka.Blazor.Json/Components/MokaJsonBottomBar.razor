@@ -2,9 +2,13 @@
 
 <div class="moka-json-bottom-bar">
 	<span class="moka-json-bottom-bar-item">@DocumentSize</span>
-	<span class="moka-json-bottom-bar-item">@(NodeCount >= 0 ? $"{NodeCount:N0} nodes" : "computing...")</span>
+	<span class="moka-json-bottom-bar-item">@(NodeCount >= 0 ? $"{NodeCount:N0} nodes" : IsLazyMode ? "~nodes" : "computing...")</span>
 	<span class="moka-json-bottom-bar-item">Depth: @CurrentDepth / @(MaxDepth >= 0 ? MaxDepth : "...")</span>
-	<span class="moka-json-bottom-bar-item">Parsed in @ParseTimeMs</span>
+	<span class="moka-json-bottom-bar-item">@(IsLazyMode ? "Indexed" : "Parsed") in @ParseTimeMs</span>
+	@if (IsLazyMode)
+	{
+		<span class="moka-json-bottom-bar-item moka-json-lazy-badge">Lazy Mode</span>
+	}
 
 	@if (SelectedPath is not null)
 	{

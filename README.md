@@ -1,22 +1,33 @@
 # Moka.Blazor.Json
 
-A high-performance Blazor JSON viewer and editor component with virtualized rendering, search, theming, and plugin support.
+A high-performance Blazor JSON viewer and editor component with virtualized rendering, lazy parsing for large documents, search, theming, and extensible context menus.
 
 [![NuGet](https://img.shields.io/nuget/v/Moka.Blazor.Json.svg)](https://www.nuget.org/packages/Moka.Blazor.Json)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Features
 
-- **Virtualized rendering** - handles documents up to 100 MB with smooth scrolling
-- **Search** - plain text, regex, case-sensitive with match navigation
-- **Theming** - light, dark, auto (system preference), or fully custom via CSS variables
-- **Context menu** - built-in actions + extensible custom actions with type/property filtering
-- **Breadcrumb navigation** - clickable path segments for easy traversal
-- **Streaming parsing** - incremental parsing for large documents via `JsonStream`
-- **Key sorting** - sort object keys alphabetically (single level or recursive)
-- **Node scoping** - zoom into any subtree
-- **Zero external dependencies** - built on `System.Text.Json`
-- **Multi-target** - supports .NET 9, and .NET 10
+- **Virtualized rendering** — handles documents up to 2 GB with smooth scrolling
+- **Lazy parsing** — documents over 50 MB use byte-offset indexing with on-demand subtree parsing
+- **Inline editing** — double-click to edit values, rename keys, add/delete nodes with undo/redo
+- **Search** — plain text, regex, case-sensitive with match navigation; streaming search for large docs
+- **Theming** — light, dark, auto (system preference), or fully custom via CSS variables
+- **Settings panel** — built-in gear menu for runtime configuration of all display/behavior settings
+- **Toolbar modes** — text-only, icon-only, or icon+text toolbar display
+- **Context menu** — built-in actions + extensible custom actions with type/property filtering
+- **Breadcrumb navigation** — clickable path segments for easy traversal
+- **Key sorting** — sort object keys alphabetically (single level or recursive)
+- **Node scoping** — zoom into any subtree as if it were the root
+- **Zero external dependencies** — built on `System.Text.Json`
+- **Multi-target** — supports .NET 9 and .NET 10
+
+## Packages
+
+| Package | Description |
+|---------|-------------|
+| [Moka.Blazor.Json](https://www.nuget.org/packages/Moka.Blazor.Json) | Main component library |
+| [Moka.Blazor.Json.Abstractions](https://www.nuget.org/packages/Moka.Blazor.Json.Abstractions) | Interfaces and models for programmatic access |
+| [Moka.Blazor.Json.Diagnostics](https://www.nuget.org/packages/Moka.Blazor.Json.Diagnostics) | Debug overlay for lazy parsing diagnostics |
 
 ## Installation
 
@@ -48,7 +59,7 @@ builder.Services.AddMokaJsonViewer();
 ### 3. Two-way binding
 
 ```razor
-<MokaJsonViewer @bind-Json="myJson" />
+<MokaJsonViewer @bind-Json="myJson" ReadOnly="false" />
 
 @code {
     private string myJson = """{"name":"Alice"}""";
@@ -61,18 +72,24 @@ builder.Services.AddMokaJsonViewer();
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `Json` | `string?` | `null` | JSON string to display |
-| `JsonStream` | `Stream?` | `null` | Stream for incremental parsing (mutually exclusive with `Json`) |
+| `JsonStream` | `Stream?` | `null` | Stream for large documents |
 | `Theme` | `MokaJsonTheme` | `Auto` | `Auto`, `Light`, `Dark`, or `Inherit` |
 | `ShowToolbar` | `bool` | `true` | Show the toolbar |
 | `ShowBottomBar` | `bool` | `true` | Show the status bar |
 | `ShowBreadcrumb` | `bool` | `true` | Show the breadcrumb path |
 | `ShowLineNumbers` | `bool` | `false` | Show line numbers |
+| `ShowSettingsButton` | `bool?` | `null` | Show settings gear in toolbar (defaults from DI options) |
 | `ReadOnly` | `bool` | `true` | Disable editing |
 | `MaxDepthExpanded` | `int` | `2` | Initial expansion depth |
 | `Height` | `string` | `"400px"` | Component height |
+| `ToolbarMode` | `MokaJsonToolbarMode?` | `null` | `Text`, `Icon`, or `IconAndText` |
+| `ToggleStyle` | `MokaJsonToggleStyle` | `Triangle` | `Triangle`, `Chevron`, `PlusMinus`, `Arrow` |
+| `ToggleSize` | `MokaJsonToggleSize` | `Small` | `ExtraSmall` through `ExtraLarge` |
+| `CollapseMode` | `MokaJsonCollapseMode` | `Depth` | `Depth`, `Root`, or `Expanded` |
+| `WordWrap` | `bool` | `true` | Enable word wrapping |
 | `OnNodeSelected` | `EventCallback<JsonNodeSelectedEventArgs>` | | Fires when a node is clicked |
-| `OnJsonChanged` | `EventCallback<JsonChangeEventArgs>` | | Fires when JSON is modified (detailed) |
-| `JsonChanged` | `EventCallback<string?>` | | Two-way binding callback for `@bind-Json` |
+| `OnJsonChanged` | `EventCallback<JsonChangeEventArgs>` | | Fires when JSON is modified |
+| `JsonChanged` | `EventCallback<string?>` | | Two-way binding callback |
 | `OnError` | `EventCallback<JsonErrorEventArgs>` | | Fires on parse/runtime errors |
 | `ContextMenuActions` | `IReadOnlyList<MokaJsonContextAction>?` | `null` | Custom context menu actions |
 | `ToolbarExtra` | `RenderFragment?` | `null` | Extra toolbar content |
@@ -83,11 +100,13 @@ builder.Services.AddMokaJsonViewer();
 builder.Services.AddMokaJsonViewer(options =>
 {
     options.DefaultTheme = MokaJsonTheme.Dark;
+    options.DefaultToolbarMode = MokaJsonToolbarMode.IconAndText;
     options.DefaultExpandDepth = 3;
-    options.MaxDocumentSizeBytes = 200 * 1024 * 1024; // 200 MB
+    options.MaxDocumentSizeBytes = 2L * 1024 * 1024 * 1024; // 2 GB
+    options.LazyParsingThresholdBytes = 50 * 1024 * 1024;   // 50 MB
+    options.MaxClipboardSizeBytes = 100 * 1024 * 1024;      // 100 MB
     options.SearchDebounceMs = 300;
-    options.StreamingThresholdBytes = 2 * 1024 * 1024; // 2 MB
-    options.MaxClipboardSizeBytes = 100 * 1024 * 1024; // 100 MB
+    options.ShowSettingsButton = true;
 });
 ```
 
@@ -120,17 +139,15 @@ The component implements `IMokaJsonViewer` for programmatic access:
 ```
 
 **Available methods:**
-- `NavigateToAsync(jsonPointer)` - Navigate to a JSON Pointer path
-- `ExpandToDepth(depth)` - Expand nodes to depth (-1 for all)
-- `ExpandAll()` / `CollapseAll()` - Expand or collapse the entire tree
-- `SearchAsync(query, options)` - Search with optional regex/case sensitivity
-- `NextMatch()` / `PreviousMatch()` - Navigate search results
-- `ClearSearch()` - Clear search state
-- `GetJson(indented)` - Get the current JSON as a string
+- `NavigateToAsync(jsonPointer)` — Navigate to a JSON Pointer path
+- `ExpandToDepth(depth)` — Expand nodes to depth (-1 for all)
+- `ExpandAll()` / `CollapseAll()` — Expand or collapse the entire tree
+- `SearchAsync(query, options)` — Search with optional regex/case sensitivity
+- `NextMatch()` / `PreviousMatch()` — Navigate search results
+- `ClearSearch()` — Clear search state
+- `GetJson(indented)` — Get the current JSON as a string
 
 ## Custom Context Menu Actions
-
-Add type-aware context menu actions:
 
 ```csharp
 private readonly List<MokaJsonContextAction> _actions =
@@ -150,19 +167,6 @@ private readonly List<MokaJsonContextAction> _actions =
             // Open URL...
             return ValueTask.CompletedTask;
         }
-    },
-    new MokaJsonContextAction
-    {
-        Id = "format-currency",
-        Label = "Format as Currency",
-        Order = 510,
-        IsVisible = ctx => ctx.ValueKind == JsonValueKind.Number
-                           && ctx.PropertyName is "salary" or "price" or "amount",
-        OnExecute = ctx =>
-        {
-            // Format number as currency...
-            return ValueTask.CompletedTask;
-        }
     }
 ];
 ```
@@ -173,47 +177,34 @@ private readonly List<MokaJsonContextAction> _actions =
 
 ## Theming
 
-### Built-in themes
+```razor
+@* Built-in themes *@
+<MokaJsonViewer Json="@json" Theme="MokaJsonTheme.Dark" />
+<MokaJsonViewer Json="@json" Theme="MokaJsonTheme.Light" />
+<MokaJsonViewer Json="@json" Theme="MokaJsonTheme.Auto" />
+
+@* Custom theme: use Inherit + your own CSS variables *@
+<MokaJsonViewer Json="@json" Theme="MokaJsonTheme.Inherit" />
+```
+
+Override CSS custom properties for full control — see [Theming documentation](https://jacobwi.github.io/Moka.Blazor.Json/guide/theming).
+
+## Diagnostics
+
+For development, add the diagnostics package to monitor lazy parsing performance:
+
+```bash
+dotnet add package Moka.Blazor.Json.Diagnostics
+```
 
 ```razor
-<MokaJsonViewer Json="@json" Theme="MokaJsonTheme.Dark" />
+@using Moka.Blazor.Json.Diagnostics.Components
+
+<MokaJsonViewer @ref="_viewer" Json="@json" />
+<MokaJsonDebugOverlay Viewer="_viewer" Enabled="true" />
 ```
 
-### Custom CSS variables
-
-Override any of these CSS custom properties:
-
-```css
-.my-custom-theme {
-    /* Syntax highlighting */
-    --moka-json-color-key: #0451a5;
-    --moka-json-color-string: #a31515;
-    --moka-json-color-number: #098658;
-    --moka-json-color-boolean: #0000ff;
-    --moka-json-color-null: #808080;
-    --moka-json-color-bracket: #319331;
-
-    /* UI */
-    --moka-json-bg: transparent;
-    --moka-json-color-text: #1e1e1e;
-    --moka-json-color-border: #e0e0e0;
-    --moka-json-color-hover: rgba(0, 0, 0, 0.04);
-    --moka-json-color-selected: rgba(0, 120, 212, 0.1);
-    --moka-json-toolbar-bg: #f3f3f3;
-    --moka-json-context-bg: #ffffff;
-
-    /* Search highlighting */
-    --moka-json-color-search-match: rgba(234, 192, 0, 0.4);
-    --moka-json-color-search-active: rgba(234, 128, 0, 0.6);
-
-    /* Typography */
-    --moka-json-font-family: 'Cascadia Code', 'Fira Code', Consolas, monospace;
-    --moka-json-font-size: 13px;
-    --moka-json-line-height: 1.6;
-}
-```
-
-Use `Theme="MokaJsonTheme.Inherit"` to apply your own theme class without any built-in overrides.
+The overlay shows real-time coverage, parse stats, cache hit rates, and recent parse operations.
 
 ## Keyboard Shortcuts
 
@@ -226,44 +217,9 @@ Use `Theme="MokaJsonTheme.Inherit"` to apply your own theme class without any bu
 | `Ctrl+Z` | Undo (edit mode) |
 | `Ctrl+Y` | Redo (edit mode) |
 
-## Event Callbacks
+## Documentation
 
-```razor
-<MokaJsonViewer Json="@json"
-                OnNodeSelected="HandleNodeSelected"
-                OnError="HandleError" />
-
-@code {
-    private void HandleNodeSelected(JsonNodeSelectedEventArgs e)
-    {
-        Console.WriteLine($"Selected: {e.Path} ({e.ValueKind})");
-        Console.WriteLine($"Property: {e.PropertyName}");
-        Console.WriteLine($"Preview: {e.RawValuePreview}");
-    }
-
-    private void HandleError(JsonErrorEventArgs e)
-    {
-        Console.WriteLine($"Error at line {e.LineNumber}: {e.Message}");
-    }
-}
-```
-
-## Streaming Large Documents
-
-For documents too large to hold in a string, use `JsonStream`:
-
-```razor
-<MokaJsonViewer JsonStream="@_stream" />
-
-@code {
-    private Stream? _stream;
-
-    private async Task LoadLargeFile()
-    {
-        _stream = File.OpenRead("large-data.json");
-    }
-}
-```
+Full documentation: [jacobwi.github.io/Moka.Blazor.Json](https://jacobwi.github.io/Moka.Blazor.Json/)
 
 ## Project Structure
 
@@ -271,6 +227,7 @@ For documents too large to hold in a string, use `JsonStream`:
 src/
   Moka.Blazor.Json/              # Main component library
   Moka.Blazor.Json.Abstractions/ # Interfaces and models
+  Moka.Blazor.Json.Diagnostics/  # Debug overlay for lazy parsing
 tests/
   Moka.Blazor.Json.Tests/        # Unit + bUnit component tests
   Moka.Blazor.Json.Benchmarks/   # Performance benchmarks

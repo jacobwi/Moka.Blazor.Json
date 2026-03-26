@@ -791,5 +791,11 @@ docs/_site/
 docs/api/*.yml
 docs/api/.manifest
 
+### MokaDocs ###
+_site/
+.DS_Store
+.idea/
+.claude/
+
 ### VisualStudio Patch ###
 # Additional files built by Visual Studio

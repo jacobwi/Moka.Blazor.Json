@@ -1,16 +1,47 @@
 @page "/"
+@using Moka.Blazor.Json.Diagnostics.Components
 
 <h1>Moka.Blazor.Json Demo</h1>
 
-<!-- ====== 1. Basic Viewer ====== -->
-<h2>1. Basic Viewer</h2>
-<p>Default settings with toolbar, breadcrumb, and bottom bar.</p>
-<MokaJsonViewer Json="@_sampleJson" Height="500px"/>
+<!-- ====== 1. Toolbar Modes ====== -->
+<h2>1. Toolbar Modes</h2>
+<p>Switch between <strong>Text</strong>, <strong>Icon</strong>, and <strong>Icon + Text</strong> toolbar layouts. Right-click any node to see context menu with icons.</p>
+<div style="display: flex; gap: 6px; align-items: center; margin-bottom: 12px;">
+	<span style="font-size: 13px; color: #666;">Toolbar mode:</span>
+	<button @onclick="@(() => _demoToolbarMode = MokaJsonToolbarMode.Text)"
+	        style="@ToolbarBtnStyle(_demoToolbarMode == MokaJsonToolbarMode.Text)">
+		Text
+	</button>
+	<button @onclick="@(() => _demoToolbarMode = MokaJsonToolbarMode.Icon)"
+	        style="@ToolbarBtnStyle(_demoToolbarMode == MokaJsonToolbarMode.Icon)">
+		Icon
+	</button>
+	<button @onclick="@(() => _demoToolbarMode = MokaJsonToolbarMode.IconAndText)"
+	        style="@ToolbarBtnStyle(_demoToolbarMode == MokaJsonToolbarMode.IconAndText)">
+		Icon + Text
+	</button>
+</div>
+<MokaJsonViewer Json="@_sampleJson" Height="500px" ToolbarMode="@_demoToolbarMode"/>
 
-<!-- ====== 2. Dark Theme ====== -->
-<h2>2. Dark Theme</h2>
-<p>Full dark theme with all features enabled.</p>
-<MokaJsonViewer Json="@_sampleJson" Theme="MokaJsonTheme.Dark" Height="400px"/>
+<!-- ====== 2. Theme Switcher ====== -->
+<h2>2. Theme</h2>
+<p>Switch between <strong>Light</strong>, <strong>Dark</strong>, and <strong>Auto</strong> (follows OS preference).</p>
+<div style="display: flex; gap: 6px; align-items: center; margin-bottom: 12px;">
+	<span style="font-size: 13px; color: #666;">Theme:</span>
+	<button @onclick="@(() => _demoTheme = MokaJsonTheme.Light)"
+	        style="@ToolbarBtnStyle(_demoTheme == MokaJsonTheme.Light)">
+		Light
+	</button>
+	<button @onclick="@(() => _demoTheme = MokaJsonTheme.Dark)"
+	        style="@ToolbarBtnStyle(_demoTheme == MokaJsonTheme.Dark)">
+		Dark
+	</button>
+	<button @onclick="@(() => _demoTheme = MokaJsonTheme.Auto)"
+	        style="@ToolbarBtnStyle(_demoTheme == MokaJsonTheme.Auto)">
+		Auto
+	</button>
+</div>
+<MokaJsonViewer Json="@_sampleJson" Theme="@_demoTheme" Height="400px"/>
 
 <!-- ====== 3. Minimal ====== -->
 <h2>3. Minimal (No Chrome)</h2>
@@ -70,11 +101,12 @@
 	</details>
 }
 
-<!-- ====== 12. Stress Test ====== -->
-<h2>12. Stress Test — Large JSON</h2>
+<!-- ====== 12. Stress Test — Lazy Parsing ====== -->
+<h2>12. Stress Test — Lazy Parsing</h2>
 <p>
-	Generate a large JSON document to test performance and virtualization.
-	<strong>Warning:</strong> very large sizes will use significant memory.
+	Generate a large JSON document to test lazy/indexed parsing.
+	Documents above 50 MB automatically use <strong>Lazy Mode</strong>: only a structural index is built upfront,
+	and subtrees are parsed on demand as you expand them. Editing is disabled in lazy mode.
 </p>
 <div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px;">
 	<label>Target size (MB):</label>
@@ -97,10 +129,26 @@
 			@_stressTestNodeCount.ToString("N0") estimated nodes |
 			Generated in @_stressTestGenTime
 		</span>
+		@if (_stressTestSize > 50 * 1024 * 1024)
+		{
+			<span style="display: inline-block; background: #0000ff; color: #fff; padding: 1px 8px; border-radius: 3px; font-size: 11px; font-weight: 600;">
+				Lazy Mode Active
+			</span>
+		}
 	}
 </div>
 
 @if (_stressTestStream is not null)
 {
-	<MokaJsonViewer JsonStream="@_stressTestStream" Height="600px" MaxDepthExpanded="1" ShowLineNumbers="true"/>
+	<div style="display: flex; align-items: center; gap: 6px; margin-bottom: 8px;">
+		<label style="display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer;">
+			<input type="checkbox" @bind="_showDiagnostics"/>
+			Show Diagnostics Overlay
+		</label>
+		<span style="color: #999; font-size: 11px;">(Moka.Blazor.Json.Diagnostics)</span>
+	</div>
+	<div style="position: relative;">
+		<MokaJsonViewer @ref="_stressTestViewer" JsonStream="@_stressTestStream" Height="600px" MaxDepthExpanded="1" ShowLineNumbers="true"/>
+		<MokaJsonDebugOverlay Viewer="_stressTestViewer" Enabled="_showDiagnostics"/>
+	</div>
 }

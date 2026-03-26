@@ -2,11 +2,10 @@ name: Deploy Docs
 
 on:
   push:
-    branches: [main]
+    branches: [master]
   workflow_dispatch:
 
 permissions:
-  actions: read
   contents: read
   pages: write
   id-token: write
@@ -24,25 +23,34 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: |
+            9.0.x
+            10.0.x
+          dotnet-quality: 'preview'
 
-      - name: Install DocFX
-        run: dotnet tool install -g docfx
+      - name: Cache MokaDocs
+        uses: actions/cache@v4
+        with:
+          path: ~/.dotnet/tools
+          key: dotnet-tools-${{ runner.os }}-mokadocs
 
-      - name: Build docs
-        run: docfx docs/docfx.json
+      - name: Install MokaDocs
+        run: dotnet tool install --global mokadocs || true
+
+      - name: Build documentation
+        run: mokadocs build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: docs/_site
+          path: _site
 
   deploy:
+    needs: build
+    runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-    runs-on: ubuntu-latest
-    needs: build
     steps:
       - name: Deploy to GitHub Pages
         id: deployment

@@ -11,10 +11,15 @@ public sealed class MokaJsonViewerOptions
 	public MokaJsonTheme DefaultTheme { get; set; } = MokaJsonTheme.Auto;
 
 	/// <summary>
-	///     Maximum document size in bytes that the viewer will attempt to parse.
-	///     Documents exceeding this limit will raise an error. Default is 100 MB.
+	///     The default toolbar display mode. Default is <see cref="MokaJsonToolbarMode.IconAndText" />.
 	/// </summary>
-	public long MaxDocumentSizeBytes { get; set; } = 100 * 1024 * 1024;
+	public MokaJsonToolbarMode DefaultToolbarMode { get; set; } = MokaJsonToolbarMode.IconAndText;
+
+	/// <summary>
+	///     Maximum document size in bytes that the viewer will attempt to parse.
+	///     Documents exceeding this limit will raise an error. Default is 2 GB.
+	/// </summary>
+	public long MaxDocumentSizeBytes { get; set; } = 2L * 1024 * 1024 * 1024;
 
 	/// <summary>
 	///     Whether edit mode is available. Default is <c>true</c>.
@@ -33,10 +38,21 @@ public sealed class MokaJsonViewerOptions
 	public int SearchDebounceMs { get; set; } = 250;
 
 	/// <summary>
-	///     Document size threshold in bytes above which streaming/indexed parsing is used
-	///     instead of full DOM parse. Default is 1 MB.
+	///     Document size threshold in bytes above which lazy/indexed parsing is used
+	///     instead of full DOM parse. Documents above this size will not support editing.
+	///     Default is 50 MB.
 	/// </summary>
-	public long StreamingThresholdBytes { get; set; } = 1024 * 1024;
+	public long LazyParsingThresholdBytes { get; set; } = 50 * 1024 * 1024;
+
+	/// <summary>
+	///     Alias for <see cref="LazyParsingThresholdBytes" />.
+	/// </summary>
+	[Obsolete("Use LazyParsingThresholdBytes instead.")]
+	public long StreamingThresholdBytes
+	{
+		get => LazyParsingThresholdBytes;
+		set => LazyParsingThresholdBytes = value;
+	}
 
 	/// <summary>
 	///     Document size threshold in bytes above which node count and max depth
@@ -49,4 +65,10 @@ public sealed class MokaJsonViewerOptions
 	///     Default is 50 MB.
 	/// </summary>
 	public long MaxClipboardSizeBytes { get; set; } = 50 * 1024 * 1024;
+
+	/// <summary>
+	///     Whether the settings gear button is shown in the toolbar.
+	///     Default is <c>true</c>.
+	/// </summary>
+	public bool ShowSettingsButton { get; set; } = true;
 }

@@ -14,18 +14,9 @@ namespace Moka.Blazor.Json.Services;
 ///     Manages the parsed representation of a JSON document, choosing the
 ///     optimal parsing strategy based on document size and usage mode.
 /// </summary>
-internal sealed class JsonDocumentManager : IAsyncDisposable
+internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, IOptions<MokaJsonViewerOptions> options)
+	: IJsonDocumentSource
 {
-	#region Constructor
-
-	public JsonDocumentManager(ILogger<JsonDocumentManager> logger, IOptions<MokaJsonViewerOptions> options)
-	{
-		_logger = logger;
-		_options = options.Value;
-	}
-
-	#endregion
-
 	#region IAsyncDisposable
 
 	/// <inheritdoc />
@@ -45,8 +36,7 @@ internal sealed class JsonDocumentManager : IAsyncDisposable
 
 	#region Fields
 
-	private readonly ILogger<JsonDocumentManager> _logger;
-	private readonly MokaJsonViewerOptions _options;
+	private readonly MokaJsonViewerOptions _options = options.Value;
 	private JsonDocument? _document;
 	private byte[]? _rentedBuffer;
 	private TimeSpan _parseTime;
@@ -77,6 +67,13 @@ internal sealed class JsonDocumentManager : IAsyncDisposable
 	///     Gets whether a document is currently loaded.
 	/// </summary>
 	public bool IsLoaded => _document is not null;
+
+	/// <inheritdoc />
+	public JsonValueKind RootValueKind =>
+		_document?.RootElement.ValueKind ?? throw new InvalidOperationException("No document is loaded.");
+
+	/// <inheritdoc />
+	public bool SupportsEditing => true;
 
 	#endregion
 
@@ -118,7 +115,7 @@ internal sealed class JsonDocumentManager : IAsyncDisposable
 
 		DocumentSizeBytes = byteCount;
 		_parseTime = sw.Elapsed;
-		_logger.LogDebug("Parsed JSON document: {Size}, {ParseTime}ms", FormatBytes(byteCount),
+		logger.LogDebug("Parsed JSON document: {Size}, {ParseTime}ms", FormatBytes(byteCount),
 			_parseTime.TotalMilliseconds);
 
 		return ValueTask.CompletedTask;
@@ -166,7 +163,7 @@ internal sealed class JsonDocumentManager : IAsyncDisposable
 		}
 
 		_parseTime = sw.Elapsed;
-		_logger.LogDebug("Parsed JSON stream: {Size}, {ParseTime}ms", FormatBytes(DocumentSizeBytes),
+		logger.LogDebug("Parsed JSON stream: {Size}, {ParseTime}ms", FormatBytes(DocumentSizeBytes),
 			_parseTime.TotalMilliseconds);
 	}
 
@@ -458,7 +455,140 @@ internal sealed class JsonDocumentManager : IAsyncDisposable
 
 	#endregion
 
+	#region IJsonDocumentSource
+
+	/// <inheritdoc />
+	public int GetChildCount(string path)
+	{
+		JsonElement element = string.IsNullOrEmpty(path) || path == "/"
+			? RootElement
+			: NavigateToElement(path);
+
+		return element.ValueKind switch
+		{
+			JsonValueKind.Object => CountObjectProperties(element),
+			JsonValueKind.Array => element.GetArrayLength(),
+			_ => 0
+		};
+	}
+
+	/// <inheritdoc />
+	public IEnumerable<JsonChildDescriptor> EnumerateChildren(string path)
+	{
+		JsonElement element = string.IsNullOrEmpty(path) || path == "/"
+			? RootElement
+			: NavigateToElement(path);
+
+		if (element.ValueKind == JsonValueKind.Object)
+		{
+			foreach (JsonProperty prop in element.EnumerateObject())
+			{
+				string childPath = string.IsNullOrEmpty(path) || path == "/"
+					? $"/{EscapeJsonPointer(prop.Name)}"
+					: $"{path}/{EscapeJsonPointer(prop.Name)}";
+
+				int childCount = prop.Value.ValueKind switch
+				{
+					JsonValueKind.Object => CountObjectProperties(prop.Value),
+					JsonValueKind.Array => prop.Value.GetArrayLength(),
+					_ => 0
+				};
+
+				yield return new JsonChildDescriptor(
+					childPath,
+					prop.Name,
+					null,
+					prop.Value.ValueKind,
+					prop.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array
+						? null
+						: GetPrimitiveRawValue(prop.Value),
+					childCount);
+			}
+		}
+		else if (element.ValueKind == JsonValueKind.Array)
+		{
+			int i = 0;
+			foreach (JsonElement item in element.EnumerateArray())
+			{
+				string childPath = string.IsNullOrEmpty(path) || path == "/"
+					? $"/{i}"
+					: $"{path}/{i}";
+
+				int childCount = item.ValueKind switch
+				{
+					JsonValueKind.Object => CountObjectProperties(item),
+					JsonValueKind.Array => item.GetArrayLength(),
+					_ => 0
+				};
+
+				yield return new JsonChildDescriptor(
+					childPath,
+					null,
+					i,
+					item.ValueKind,
+					item.ValueKind is JsonValueKind.Object or JsonValueKind.Array
+						? null
+						: GetPrimitiveRawValue(item),
+					childCount);
+				i++;
+			}
+		}
+	}
+
+	/// <inheritdoc />
+	public string? GetRawValue(string path)
+	{
+		JsonElement element = string.IsNullOrEmpty(path) || path == "/"
+			? RootElement
+			: NavigateToElement(path);
+
+		return element.ValueKind is JsonValueKind.Object or JsonValueKind.Array
+			? null
+			: GetPrimitiveRawValue(element);
+	}
+
+	/// <inheritdoc />
+	public JsonValueKind GetValueKind(string path)
+	{
+		JsonElement element = string.IsNullOrEmpty(path) || path == "/"
+			? RootElement
+			: NavigateToElement(path);
+
+		return element.ValueKind;
+	}
+
+	/// <inheritdoc />
+	public JsonElement GetElement(string path) => NavigateToElement(path);
+
+	#endregion
+
 	#region Private Methods
+
+	private static int CountObjectProperties(JsonElement element)
+	{
+		int count = 0;
+		foreach (JsonProperty _ in element.EnumerateObject())
+		{
+			count++;
+		}
+
+		return count;
+	}
+
+	private static string? GetPrimitiveRawValue(JsonElement element)
+	{
+		return element.ValueKind switch
+		{
+			JsonValueKind.String => element.GetString(),
+			JsonValueKind.Number => element.GetRawText(),
+			JsonValueKind.True => "true",
+			JsonValueKind.False => "false",
+			JsonValueKind.Null => "null",
+			_ => null
+		};
+	}
+
+	private static string EscapeJsonPointer(string segment) => segment.Replace("~", "~0").Replace("/", "~1");
 
 	private static int CountNodes(JsonElement element)
 	{

@@ -5,12 +5,13 @@
     <IsPackable>false</IsPackable>
     <!-- CA1707: Test method naming convention uses underscores.
          CA1001: Not applicable for test code. -->
-    <NoWarn>$(NoWarn);CA1707;CA1001</NoWarn>
+    <!-- xUnit1051: Test code uses default CancellationToken — acceptable for unit tests. -->
+    <NoWarn>$(NoWarn);CA1707;CA1001;xUnit1051</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="bunit" />
-    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
   </ItemGroup>

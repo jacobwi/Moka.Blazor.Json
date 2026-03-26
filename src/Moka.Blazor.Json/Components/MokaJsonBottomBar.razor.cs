@@ -40,6 +40,10 @@ public sealed partial class MokaJsonBottomBar : ComponentBase
 	[Parameter]
 	public string? ValidationError { get; set; }
 
+	/// <summary>Whether the document is loaded in lazy (indexed) mode.</summary>
+	[Parameter]
+	public bool IsLazyMode { get; set; }
+
 	private string ValidationClass => IsValid
 		? "moka-json-bottom-bar-item moka-json-validation-valid"
 		: "moka-json-bottom-bar-item moka-json-validation-invalid";

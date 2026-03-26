@@ -6,6 +6,14 @@
 
 	<link href="_content/Moka.Blazor.Json/css/moka-json.css" rel="stylesheet"/>
 
+	@if (_toastMessage is not null)
+	{
+		<div class="moka-json-toast" @onclick="DismissToast">
+			<span class="moka-json-toast-text">@_toastMessage</span>
+			<button class="moka-json-toast-dismiss" title="Dismiss">&times;</button>
+		</div>
+	}
+
 	@if (_errorMessage is not null)
 	{
 		<div class="moka-json-error">
@@ -19,16 +27,64 @@
 	}
 	else if (_isLoaded)
 	{
+		@if (_isBusy)
+		{
+			<div class="moka-json-busy-overlay">
+				<span class="moka-json-busy-spinner"></span>
+				<span class="moka-json-busy-text">@_busyMessage</span>
+			</div>
+		}
+
 		@if (ShowToolbar)
 		{
-			<MokaJsonToolbar OnSearchToggle="ToggleSearch"
-			                 OnExpandAll="HandleExpandAll"
-			                 OnCollapseAll="HandleCollapseAll"
-			                 OnFormatToggle="HandleFormatToggle"
-			                 OnCopyAll="HandleCopyAll"
-			                 OnExport="HandleExport"
-			                 IsFormatted="_isFormatted"
-			                 ToolbarExtra="ToolbarExtra"/>
+			<div style="position: relative;">
+				<MokaJsonToolbar OnSearchToggle="ToggleSearch"
+				                 OnExpandAll="HandleExpandAll"
+				                 OnCollapseAll="HandleCollapseAll"
+				                 OnFormatToggle="HandleFormatToggle"
+				                 OnCopyAll="HandleCopyAll"
+				                 OnExport="HandleExport"
+				                 IsFormatted="_isFormatted"
+				                 ToolbarExtra="ToolbarExtra"
+				                 IsBusy="_isBusy"
+				                 ToolbarMode="EffectiveToolbarMode"
+				                 OnSettingsToggle="ToggleSettings"
+				                 ShowSettingsButton="EffectiveShowSettingsButton"/>
+
+				@if (_showSettings)
+				{
+					<MokaJsonSettingsPanel IsVisible="true"
+					                       Left="_settingsLeft"
+					                       Top="_settingsTop"
+					                       OnDismiss="DismissSettings"
+					                       Theme="Theme"
+					                       ThemeChanged="HandleSettingsThemeChanged"
+					                       ToolbarMode="EffectiveToolbarMode"
+					                       ToolbarModeChanged="HandleSettingsToolbarModeChanged"
+					                       ToggleStyle="ToggleStyle"
+					                       ToggleStyleChanged="HandleSettingsToggleStyleChanged"
+					                       ToggleSize="ToggleSize"
+					                       ToggleSizeChanged="HandleSettingsToggleSizeChanged"
+					                       ShowLineNumbers="ShowLineNumbers"
+					                       ShowLineNumbersChanged="HandleSettingsShowLineNumbersChanged"
+					                       WordWrap="WordWrap"
+					                       WordWrapChanged="HandleSettingsWordWrapChanged"
+					                       ShowBreadcrumb="ShowBreadcrumb"
+					                       ShowBreadcrumbChanged="HandleSettingsShowBreadcrumbChanged"
+					                       ShowBottomBar="ShowBottomBar"
+					                       ShowBottomBarChanged="HandleSettingsShowBottomBarChanged"
+					                       MaxDepthExpanded="MaxDepthExpanded"
+					                       MaxDepthExpandedChanged="HandleSettingsMaxDepthChanged"
+					                       CollapseMode="CollapseMode"
+					                       CollapseModeChanged="HandleSettingsCollapseModeChanged"
+					                       ReadOnly="ReadOnly"
+					                       ReadOnlyChanged="HandleSettingsReadOnlyChanged"
+					                       SearchCaseSensitive="_searchCaseSensitive"
+					                       SearchCaseSensitiveChanged="HandleSettingsSearchCaseSensitiveChanged"
+					                       SearchUseRegex="_searchUseRegex"
+					                       SearchUseRegexChanged="HandleSettingsSearchUseRegexChanged"/>
+				}
+			</div>
 		}
 
 		@if (_showSearch)
@@ -46,10 +102,10 @@
 			                       OnRegexChanged="HandleRegexChanged"/>
 		}
 
-		@if (ShowBreadcrumb && (SelectedPath is not null || _scopedPath is not null) && _documentManager is not null)
+		@if (ShowBreadcrumb && (SelectedPath is not null || _scopedPath is not null) && _documentSource is not null)
 		{
 			<MokaJsonBreadcrumb Path="@(SelectedPath ?? _scopedPath)"
-			                    RootValueKind="@_documentManager.RootElement.ValueKind"
+			                    RootValueKind="@_documentSource.RootValueKind"
 			                    OnNavigate="HandleBreadcrumbNavigate"/>
 		}
 
@@ -58,7 +114,7 @@
 		                      ShowLineNumbers="ShowLineNumbers"
 		                      ToggleStyle="ToggleStyle"
 		                      ToggleSize="ToggleSize"
-		                      ReadOnly="ReadOnly"
+		                      ReadOnly="EffectiveReadOnly"
 		                      EditState="@_activeEdit"
 		                      OnToggle="HandleToggle"
 		                      OnSelect="HandleSelect"
@@ -76,7 +132,8 @@
 			                   ParseTimeMs="@_parseTimeMs"
 			                   SelectedPath="@SelectedPath"
 			                   IsValid="@_isValid"
-			                   ValidationError="@_validationError"/>
+			                   ValidationError="@_validationError"
+			                   IsLazyMode="@_isLazyMode"/>
 		}
 	}
 </div>

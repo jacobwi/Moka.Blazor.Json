@@ -14,7 +14,11 @@
 			<div class="@GetItemClass(isEnabled)"
 			     @onclick="() => HandleAction(action, isEnabled)">
 				<span class="moka-json-context-item-label">
-					@if (action.IconCss is not null)
+					@if (action.IconSvg is not null)
+					{
+						<span class="moka-json-context-icon">@((MarkupString)action.IconSvg)</span>
+					}
+					else if (action.IconCss is not null)
 					{
 						<span class="@action.IconCss"></span>
 					}

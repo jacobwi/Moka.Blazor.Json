@@ -1,0 +1,58 @@
+site:
+  title: "Moka.Blazor.Json"
+  description: "A high-performance Blazor JSON viewer and editor component"
+  logo: icon.png
+  favicon: icon.png
+  socialLinks:
+    - icon: github
+      url: "https://github.com/jacobwi/Moka.Blazor.Json"
+    - icon: nuget
+      url: "https://www.nuget.org/packages/Moka.Blazor.Json"
+
+content:
+  docs: ./docs
+  projects:
+    - path: ./src/Moka.Blazor.Json/Moka.Blazor.Json.csproj
+      label: Core Library
+    - path: ./src/Moka.Blazor.Json.Abstractions/Moka.Blazor.Json.Abstractions.csproj
+      label: Abstractions
+    - path: ./src/Moka.Blazor.Json.Diagnostics/Moka.Blazor.Json.Diagnostics.csproj
+      label: Diagnostics
+
+nav:
+  - label: "Guide"
+    icon: book-open
+    expanded: true
+    children:
+      - label: "Getting Started"
+        path: "/guide/getting-started"
+      - label: "Configuration"
+        path: "/guide/configuration"
+      - label: "Theming"
+        path: "/guide/theming"
+      - label: "Context Menu"
+        path: "/guide/context-menu"
+      - label: "Edit Mode"
+        path: "/guide/edit-mode"
+      - label: "Performance"
+        path: "/guide/performance"
+      - label: "Diagnostics"
+        path: "/guide/diagnostics"
+  - label: "API Reference"
+    icon: code
+    autoGenerate: true
+
+theme:
+  name: default
+  options:
+    primaryColor: "#0ea5e9"
+    codeTheme: catppuccin-mocha
+    codeStyle: macos
+    showEditLink: false
+    showLastUpdated: true
+
+build:
+  basePath: /
+
+plugins:
+  - name: mokadocs-repl

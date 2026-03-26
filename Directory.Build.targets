@@ -4,6 +4,8 @@
 		<Version>0.1.10</Version>
 		<Authors>jacobwi, BCat, Moka</Authors>
 		<Copyright>Copyright (c) Moka 2026</Copyright>
+		<Company>Moka</Company>
+		<Product>Moka.Blazor.Json</Product>
 		<PackageLicenseExpression>MIT</PackageLicenseExpression>
 		<PackageProjectUrl>https://github.com/jacobwi/Moka.Blazor.Json</PackageProjectUrl>
 		<RepositoryUrl>https://github.com/jacobwi/Moka.Blazor.Json</RepositoryUrl>

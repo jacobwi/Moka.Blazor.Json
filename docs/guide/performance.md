@@ -1,3 +1,7 @@
+---
+title: "Performance"
+---
+
 # Performance
 
 ## Virtualized Rendering
