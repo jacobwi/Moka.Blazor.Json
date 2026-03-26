@@ -28,14 +28,8 @@ jobs:
             10.0.x
           dotnet-quality: 'preview'
 
-      - name: Cache MokaDocs
-        uses: actions/cache@v4
-        with:
-          path: ~/.dotnet/tools
-          key: dotnet-tools-${{ runner.os }}-mokadocs
-
       - name: Install MokaDocs
-        run: dotnet tool install --global mokadocs || true
+        run: dotnet tool install --global mokadocs --version 1.0.3
 
       - name: Build documentation
         run: mokadocs build
