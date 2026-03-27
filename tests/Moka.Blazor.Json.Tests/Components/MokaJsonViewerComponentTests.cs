@@ -20,6 +20,19 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 
 	public async ValueTask DisposeAsync() => await _ctx.DisposeAsync();
 
+	/// <summary>
+	///     Renders a <see cref="MokaJsonViewer" /> and waits for async loading to complete.
+	///     The component uses Task.Yield() during load, so bUnit needs to wait for the
+	///     loading state to resolve before tests can query the DOM.
+	/// </summary>
+	private IRenderedComponent<MokaJsonViewer> RenderViewer(
+		Action<ComponentParameterCollectionBuilder<MokaJsonViewer>> configure)
+	{
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render(configure);
+		cut.WaitForState(() => cut.FindAll(".moka-json-loading").Count == 0, TimeSpan.FromSeconds(3));
+		return cut;
+	}
+
 	#region Context Menu Data
 
 	[Fact]
@@ -31,7 +44,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		string longValue = new('x', 1000);
 		string json = $$"""{"data":"{{longValue}}"}""";
 
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, json)
 			.Add(v => v.OnNodeSelected, e => selectedArgs = e)
 			.Add(v => v.MaxDepthExpanded, 2));
@@ -62,7 +75,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Renders_Json_Tree_When_Json_Provided()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"name":"test"}"""));
 
 		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node");
@@ -72,7 +85,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Shows_Error_For_Invalid_Json()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, "{invalid json}"));
 
 		IElement error = cut.Find(".moka-json-error");
@@ -82,7 +95,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void ShowToolbar_False_Hides_Toolbar()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1}""")
 			.Add(v => v.ShowToolbar, false));
 
@@ -92,7 +105,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void ShowToolbar_True_Shows_Toolbar()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1}""")
 			.Add(v => v.ShowToolbar, true));
 
@@ -102,7 +115,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void ShowBottomBar_False_Hides_BottomBar()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1}""")
 			.Add(v => v.ShowBottomBar, false));
 
@@ -112,7 +125,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void ShowBottomBar_True_Shows_BottomBar()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1}""")
 			.Add(v => v.ShowBottomBar, true));
 
@@ -122,7 +135,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Theme_Dark_Sets_DataAttribute()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1}""")
 			.Add(v => v.Theme, MokaJsonTheme.Dark));
 
@@ -133,7 +146,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Theme_Light_Sets_DataAttribute()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1}""")
 			.Add(v => v.Theme, MokaJsonTheme.Light));
 
@@ -169,7 +182,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	{
 		JsonErrorEventArgs? receivedError = null;
 
-		_ctx.Render<MokaJsonViewer>(p => p
+		RenderViewer(p => p
 			.Add(v => v.Json, "{bad}")
 			.Add(v => v.OnError, e => receivedError = e));
 
@@ -182,7 +195,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	{
 		JsonNodeSelectedEventArgs? selectedArgs = null;
 
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"name":"test","value":42}""")
 			.Add(v => v.OnNodeSelected, e => selectedArgs = e));
 
@@ -201,7 +214,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Search_Button_Toggles_Search_Overlay()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1}""")
 			.Add(v => v.ShowToolbar, true));
 
@@ -219,7 +232,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Expand_Button_Expands_All_Nodes()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":{"b":{"c":1}}}""")
 			.Add(v => v.MaxDepthExpanded, 0));
 
@@ -236,7 +249,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Collapse_Button_Collapses_All_Except_Root()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":{"b":1},"c":2}""")
 			.Add(v => v.MaxDepthExpanded, 5));
 
@@ -260,7 +273,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void BottomBar_Shows_DocumentSize()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1}""")
 			.Add(v => v.ShowBottomBar, true));
 
@@ -271,7 +284,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void BottomBar_Shows_NodeCount()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1,"b":2}""")
 			.Add(v => v.ShowBottomBar, true));
 
@@ -282,7 +295,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void BottomBar_Shows_ParseTime()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1}""")
 			.Add(v => v.ShowBottomBar, true));
 
@@ -293,7 +306,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Export_Button_Exists_In_Toolbar()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1}""")
 			.Add(v => v.ShowToolbar, true));
 
@@ -304,7 +317,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Export_Button_Invokes_JS_Download()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1}""")
 			.Add(v => v.ShowToolbar, true));
 
@@ -318,7 +331,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Copy_Button_Invokes_JS_Clipboard()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1}""")
 			.Add(v => v.ShowToolbar, true));
 
@@ -338,7 +351,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[InlineData(MokaJsonToggleStyle.Arrow)]
 	public void ToggleStyle_Renders_Toggle_Button(MokaJsonToggleStyle style)
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":{"b":1}}""")
 			.Add(v => v.MaxDepthExpanded, 2)
 			.Add(v => v.ToggleStyle, style));
@@ -353,7 +366,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[InlineData(MokaJsonToggleSize.Large, "moka-json-toggle--lg")]
 	public void ToggleSize_Applies_Css_Class(MokaJsonToggleSize size, string expectedClass)
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":{"b":1}}""")
 			.Add(v => v.MaxDepthExpanded, 2)
 			.Add(v => v.ToggleSize, size));
@@ -366,7 +379,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Default_ToggleSize_Is_Small()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":{"b":1}}""")
 			.Add(v => v.MaxDepthExpanded, 2));
 
@@ -382,7 +395,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void ReadOnly_False_Adds_Editable_Class()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"name":"Alice"}""")
 			.Add(v => v.ReadOnly, false)
 			.Add(v => v.MaxDepthExpanded, 2));
@@ -394,7 +407,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void ReadOnly_True_Does_Not_Add_Editable_Class()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"name":"Alice"}""")
 			.Add(v => v.ReadOnly, true)
 			.Add(v => v.MaxDepthExpanded, 2));
@@ -405,7 +418,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void DoubleClick_On_Value_Node_Shows_Inline_Edit()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"name":"Alice"}""")
 			.Add(v => v.ReadOnly, false)
 			.Add(v => v.MaxDepthExpanded, 2));
@@ -423,7 +436,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void DoubleClick_On_ReadOnly_Does_Not_Show_Edit()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"name":"Alice"}""")
 			.Add(v => v.ReadOnly, true)
 			.Add(v => v.MaxDepthExpanded, 2));
@@ -438,7 +451,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Edit_Context_Menu_Actions_Visible_When_Not_ReadOnly()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"name":"Alice"}""")
 			.Add(v => v.ReadOnly, false)
 			.Add(v => v.MaxDepthExpanded, 2));
@@ -457,7 +470,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Edit_Context_Menu_Actions_Hidden_When_ReadOnly()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"name":"Alice"}""")
 			.Add(v => v.ReadOnly, true)
 			.Add(v => v.MaxDepthExpanded, 2));
@@ -477,7 +490,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	{
 		string? changedJson = null;
 
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"name":"Alice"}""")
 			.Add(v => v.ReadOnly, false)
 			.Add(v => v.JsonChanged, json => changedJson = json)
@@ -502,7 +515,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	{
 		string? boundJson = """{"count":10}""";
 
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, boundJson)
 			.Add(v => v.ReadOnly, false)
 			.Add(v => v.JsonChanged, json => boundJson = json)
@@ -527,7 +540,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	{
 		string? changedJson = null;
 
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"name":"Alice","age":30}""")
 			.Add(v => v.ReadOnly, false)
 			.Add(v => v.JsonChanged, json => changedJson = json)
@@ -552,7 +565,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	{
 		string? changedJson = null;
 
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"name":"Alice"}""")
 			.Add(v => v.ReadOnly, false)
 			.Add(v => v.JsonChanged, json => changedJson = json)
@@ -579,7 +592,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void CollapseMode_Root_Shows_Minimal_Nodes()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":{"b":1},"c":2}""")
 			.Add(v => v.CollapseMode, MokaJsonCollapseMode.Root));
 
@@ -591,7 +604,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void CollapseMode_Expanded_Shows_All_Nodes()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":{"b":1},"c":2}""")
 			.Add(v => v.CollapseMode, MokaJsonCollapseMode.Expanded));
 
@@ -603,7 +616,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void CollapseMode_Depth_Uses_MaxDepthExpanded()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":{"b":{"c":1}}}""")
 			.Add(v => v.CollapseMode, MokaJsonCollapseMode.Depth)
 			.Add(v => v.MaxDepthExpanded, 1));
@@ -613,7 +626,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		int expandedCount = cut.FindAll(".moka-json-node").Count;
 
 		// With depth 1, "a" object shows but "b" object is collapsed
-		IRenderedComponent<MokaJsonViewer> cutFull = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cutFull = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":{"b":{"c":1}}}""")
 			.Add(v => v.CollapseMode, MokaJsonCollapseMode.Expanded));
 
@@ -628,7 +641,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Renders_Array_Json()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """[1,2,3]"""));
 
 		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node");
@@ -638,7 +651,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Renders_Nested_Json()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"user":{"name":"Alice","age":30},"tags":["dev","admin"]}""")
 			.Add(v => v.MaxDepthExpanded, 3));
 
@@ -649,7 +662,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void ShowLineNumbers_Renders_Line_Numbers()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1,"b":2}""")
 			.Add(v => v.ShowLineNumbers, true));
 
@@ -660,7 +673,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void ShowLineNumbers_False_Hides_Line_Numbers()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1,"b":2}""")
 			.Add(v => v.ShowLineNumbers, false));
 
@@ -670,13 +683,15 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Changing_Json_Rerenders_Tree()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"a":1}"""));
 
 		int initialNodeCount = cut.FindAll(".moka-json-node").Count;
 
 		cut.Render(p => p
 			.Add(v => v.Json, """{"a":1,"b":2,"c":3,"d":4}"""));
+
+		cut.WaitForState(() => cut.FindAll(".moka-json-loading").Count == 0, TimeSpan.FromSeconds(3));
 
 		int newNodeCount = cut.FindAll(".moka-json-node").Count;
 		Assert.True(newNodeCount > initialNodeCount);
@@ -685,7 +700,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Keys_Are_Rendered_In_Markup()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"firstName":"John"}""")
 			.Add(v => v.MaxDepthExpanded, 2));
 
@@ -696,7 +711,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void String_Values_Are_Rendered()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"name":"Alice"}""")
 			.Add(v => v.MaxDepthExpanded, 2));
 
@@ -707,7 +722,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 	[Fact]
 	public void Number_Values_Are_Rendered()
 	{
-		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, """{"count":42}""")
 			.Add(v => v.MaxDepthExpanded, 2));
 
