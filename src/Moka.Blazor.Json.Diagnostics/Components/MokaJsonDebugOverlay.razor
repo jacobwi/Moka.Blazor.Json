@@ -1,9 +1,12 @@
 @namespace Moka.Blazor.Json.Diagnostics.Components
 
+<HeadContent>
+	<link href="_content/Moka.Blazor.Json/css/moka-json.css" rel="stylesheet"/>
+</HeadContent>
+
 @if (Enabled && Stats is not null)
 {
 	<div class="moka-json-debug-overlay">
-		<link href="_content/Moka.Blazor.Json/css/moka-json.css" rel="stylesheet"/>
 
 		<div class="moka-json-debug-title">Lazy Parsing Diagnostics</div>
 

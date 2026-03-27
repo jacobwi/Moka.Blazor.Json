@@ -68,6 +68,7 @@ builder.Services.AddMokaJsonViewer(options =>
 |---------|-------------|
 | Moka.Blazor.Json | Main component library |
 | Moka.Blazor.Json.Abstractions | Interfaces and models |
+| Moka.Blazor.Json.AI | AI assistant panel for JSON analysis (LM Studio, Ollama, ONNX) |
 | Moka.Blazor.Json.Diagnostics | Debug overlay for lazy parsing |
 
 ## Documentation

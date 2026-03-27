@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Components;
+using Moka.Blazor.Json.AI.Components;
 using Moka.Blazor.Json.Components;
 using Moka.Blazor.Json.Models;
 
@@ -260,6 +261,33 @@ public sealed partial class Home : ComponentBase
 	private string _largeArrayJson = "[]";
 
 	#endregion
+
+	private bool _refsReady;
+
+	protected override void OnAfterRender(bool firstRender)
+	{
+		// After first render, @ref fields are populated — re-render so child components
+		// (like MokaJsonAiPanel) receive the non-null viewer references.
+		if (firstRender && !_refsReady)
+		{
+			_refsReady = true;
+
+			// Create the "Ask AI" context action now that the panel ref is available
+			if (_aiPanel is not null)
+			{
+				_aiContextActions = [_aiPanel.CreateAskAiContextAction()];
+			}
+
+			// Set up scoped AI demo — default to customer viewer
+			if (_scopedPanel is not null)
+			{
+				_activeViewer = _scopedViewer1;
+				_scopedContextActions = [_scopedPanel.CreateAskAiContextAction()];
+			}
+
+			StateHasChanged();
+		}
+	}
 
 	private void BuildCustomContextActions()
 	{
@@ -684,9 +712,157 @@ public sealed partial class Home : ComponentBase
 	private int _stressTestNodeCount;
 	private long _stressTestSize;
 	private MokaJsonViewer? _stressTestViewer;
+	private MokaJsonViewer? _aiDemoViewer;
+	private MokaJsonAiPanel? _aiPanel;
+	private IReadOnlyList<MokaJsonContextAction>? _aiContextActions;
 	private bool _showDiagnostics;
 	private Stream? _stressTestStream;
 	private int _targetSizeMb = 50;
+
+	#endregion
+
+	#region 14. Scoped AI Context
+
+	private const string _customerJson = """
+	                                     {
+	                                       "id": "cust_482",
+	                                       "name": "Sarah Chen",
+	                                       "email": "sarah.chen@example.com",
+	                                       "plan": "enterprise",
+	                                       "status": "active",
+	                                       "signedUp": "2023-08-14T09:30:00Z",
+	                                       "address": {
+	                                         "street": "742 Evergreen Terrace",
+	                                         "city": "Portland",
+	                                         "state": "OR",
+	                                         "zip": "97201",
+	                                         "country": "US"
+	                                       },
+	                                       "preferences": {
+	                                         "newsletter": true,
+	                                         "smsAlerts": false,
+	                                         "language": "en",
+	                                         "timezone": "America/Los_Angeles"
+	                                       },
+	                                       "metrics": {
+	                                         "totalOrders": 47,
+	                                         "lifetimeValue": 12450.00,
+	                                         "avgOrderValue": 264.89,
+	                                         "lastLogin": "2026-03-25T14:22:00Z",
+	                                         "nps": 9
+	                                       }
+	                                     }
+	                                     """;
+
+	private const string _orderJson = """
+	                                  {
+	                                    "orderId": "ORD-2026-1847",
+	                                    "customerId": "cust_482",
+	                                    "status": "shipped",
+	                                    "placedAt": "2026-03-20T11:15:00Z",
+	                                    "shippedAt": "2026-03-22T08:00:00Z",
+	                                    "estimatedDelivery": "2026-03-28",
+	                                    "items": [
+	                                      {
+	                                        "sku": "WDG-001-BLK-M",
+	                                        "name": "Premium Widget (Black, M)",
+	                                        "quantity": 2,
+	                                        "unitPrice": 39.99,
+	                                        "subtotal": 79.98
+	                                      },
+	                                      {
+	                                        "sku": "ACC-015-SLV",
+	                                        "name": "Widget Adapter (Silver)",
+	                                        "quantity": 1,
+	                                        "unitPrice": 14.99,
+	                                        "subtotal": 14.99
+	                                      }
+	                                    ],
+	                                    "totals": {
+	                                      "subtotal": 94.97,
+	                                      "shipping": 9.99,
+	                                      "tax": 8.40,
+	                                      "discount": -10.00,
+	                                      "total": 103.36
+	                                    },
+	                                    "payment": {
+	                                      "method": "visa",
+	                                      "last4": "4242",
+	                                      "charged": true
+	                                    },
+	                                    "tracking": {
+	                                      "carrier": "USPS",
+	                                      "number": "9400111899223456789012",
+	                                      "url": "https://tools.usps.com/go/TrackConfirmAction?tLabels=9400111899223456789012"
+	                                    }
+	                                  }
+	                                  """;
+
+	private MokaJsonViewer? _scopedViewer1;
+	private MokaJsonViewer? _scopedViewer2;
+	private MokaJsonAiPanel? _scopedPanel;
+	private MokaJsonViewer? _activeViewer;
+	private IReadOnlyList<MokaJsonContextAction>? _scopedContextActions;
+	private bool _customerScoped;
+	private bool _orderScoped;
+
+	private void ToggleCustomerScope()
+	{
+		_customerScoped = !_customerScoped;
+		RebuildScopedSources();
+	}
+
+	private void ToggleOrderScope()
+	{
+		_orderScoped = !_orderScoped;
+		RebuildScopedSources();
+	}
+
+	private void ClearScopeDemo()
+	{
+		_customerScoped = false;
+		_orderScoped = false;
+		_scopedPanel?.ClearScope();
+		StateHasChanged();
+	}
+
+	private void RebuildScopedSources()
+	{
+		if (_scopedPanel is null)
+		{
+			return;
+		}
+
+		// Clear existing sources and rebuild
+		_scopedPanel.ClearScope();
+
+		if (_customerScoped)
+		{
+			_scopedPanel.AddSource("Customer", _customerJson);
+		}
+
+		if (_orderScoped)
+		{
+			_scopedPanel.AddSource("Order", _orderJson);
+		}
+
+		// Set the active viewer to whichever was toggled last (for single-viewer features like Selection)
+		if (_orderScoped)
+		{
+			_activeViewer = _scopedViewer2;
+		}
+		else if (_customerScoped)
+		{
+			_activeViewer = _scopedViewer1;
+		}
+
+		StateHasChanged();
+	}
+
+	private static string ScopeBtnStyle(bool active) =>
+		active
+			? "padding: 4px 12px; font-size: 12px; border: 1px solid #0ea5e9; background: #0ea5e9; color: #fff; border-radius: 4px; cursor: pointer; font-family: inherit;"
+			: "padding: 4px 12px; font-size: 12px; border: 1px solid #ddd; background: #fff; color: #333; border-radius: 4px; cursor: pointer; font-family: inherit;";
 
 	#endregion
 }

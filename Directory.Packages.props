@@ -19,6 +19,15 @@
 		<PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.5" />
 	</ItemGroup>
 
+	<!-- AI plugin dependencies -->
+	<ItemGroup>
+		<PackageVersion Include="Moka.Blazor.AI" Version="0.1.0" />
+		<PackageVersion Include="Markdig" Version="1.1.1" />
+		<PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.4.1" />
+		<PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.4.1" />
+		<PackageVersion Include="OllamaSharp" Version="5.4.18" />
+	</ItemGroup>
+
 	<!-- Test dependencies -->
 	<ItemGroup>
 		<PackageVersion Include="bunit" Version="2.6.2" />

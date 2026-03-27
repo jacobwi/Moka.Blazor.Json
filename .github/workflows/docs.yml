@@ -32,7 +32,7 @@ jobs:
         run: dotnet tool install --global mokadocs
 
       - name: Build documentation
-        run: mokadocs build
+        run: mokadocs build --base-path /Moka.Blazor.Json/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

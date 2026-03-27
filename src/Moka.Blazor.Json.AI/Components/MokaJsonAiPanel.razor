@@ -1,0 +1,18 @@
+@namespace Moka.Blazor.Json.AI.Components
+
+<MokaAiPanel @ref="_panel"
+             Title="@Title"
+             SystemPrompt="@SystemPrompt"
+             QuickActions="@_quickActions"
+             MessagesHeight="@MessagesHeight"
+             Placeholder="@Placeholder"
+             ShowQuickActions="ShowQuickActions"
+             ThemeAttribute="@ThemeAttribute">
+	<ActionsExtra>
+		<button @onclick="AskAboutSelection" disabled="@(_panel?.IsSending ?? (false || !HasSelection))"
+		        title="@(HasSelection ? $"Ask about {Viewer?.SelectedPath}" : "Select a node in the viewer first")"
+		        class="@(HasSelection ? "has-selection" : "")">
+			Selection
+		</button>
+	</ActionsExtra>
+</MokaAiPanel>

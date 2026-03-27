@@ -3,11 +3,6 @@ site:
   description: "A high-performance Blazor JSON viewer and editor component"
   logo: icon.png
   favicon: icon.png
-  socialLinks:
-    - icon: github
-      url: "https://github.com/jacobwi/Moka.Blazor.Json"
-    - icon: nuget
-      url: "https://www.nuget.org/packages/Moka.Blazor.Json"
 
 content:
   docs: ./docs
@@ -16,6 +11,8 @@ content:
       label: Core Library
     - path: ./src/Moka.Blazor.Json.Abstractions/Moka.Blazor.Json.Abstractions.csproj
       label: Abstractions
+    - path: ./src/Moka.Blazor.Json.AI/Moka.Blazor.Json.AI.csproj
+      label: AI Plugin
     - path: ./src/Moka.Blazor.Json.Diagnostics/Moka.Blazor.Json.Diagnostics.csproj
       label: Diagnostics
 
@@ -36,6 +33,8 @@ nav:
         path: "/guide/edit-mode"
       - label: "Performance"
         path: "/guide/performance"
+      - label: "AI Assistant"
+        path: "/guide/ai-assistant"
       - label: "Diagnostics"
         path: "/guide/diagnostics"
   - label: "API Reference"
@@ -50,9 +49,11 @@ theme:
     codeStyle: macos
     showEditLink: false
     showLastUpdated: true
-
-build:
-  basePath: /Moka.Blazor.Json/
+    socialLinks:
+      - icon: github
+        url: "https://github.com/jacobwi/Moka.Blazor.Json"
+      - icon: nuget
+        url: "https://www.nuget.org/packages/Moka.Blazor.Json"
 
 plugins:
   - name: mokadocs-repl

@@ -1,4 +1,5 @@
 @page "/"
+@using Moka.Blazor.Json.AI.Components
 @using Moka.Blazor.Json.Diagnostics.Components
 
 <h1>Moka.Blazor.Json Demo</h1>
@@ -152,3 +153,79 @@
 		<MokaJsonDebugOverlay Viewer="_stressTestViewer" Enabled="_showDiagnostics"/>
 	</div>
 }
+
+<!-- ====== AI Assistant ====== -->
+<h2>13. AI Assistant</h2>
+<p>
+	Ask natural language questions about your JSON data. Powered by a local LLM via <strong>LM Studio</strong>, <strong>Ollama</strong>, or any <code>IChatClient</code> provider.
+	Use the quick actions or type a question. Click <strong>Stop</strong> to cancel mid-stream.
+</p>
+<p style="font-size: 12px; color: #888;">Requires <a href="https://lmstudio.ai" target="_blank">LM Studio</a> running locally with a model loaded (e.g., Qwen2.5-3B or Phi-3.5-mini).</p>
+<MokaJsonViewer @ref="_aiDemoViewer" Json="@_sampleJson" Height="400px" ContextMenuActions="_aiContextActions"/>
+<MokaJsonAiPanel @ref="_aiPanel" Viewer="_aiDemoViewer" MessagesHeight="400px"/>
+
+<!-- ====== Scoped AI Context ====== -->
+<h2>14. Scoped AI Context</h2>
+<p>
+	Two separate JSON objects displayed side by side. Click <strong>Scope to this</strong> to focus the AI panel on just that object's data.
+	The AI only sees the scoped context — perfect for comparing or analyzing specific datasets without the full document.
+</p>
+<p style="font-size: 12px; color: #888;">
+	Right-click any node and choose <strong>Ask AI</strong> to auto-scope to that subtree. Or use the buttons below to scope the entire viewer.
+</p>
+<div style="display: flex; gap: 16px; margin-bottom: 12px;">
+	<div style="flex: 1;">
+		<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+			<h4 style="margin: 0;">🧑 Customer Record</h4>
+			<button @onclick="ToggleCustomerScope"
+			        disabled="@(_scopedPanel is null || _scopedPanel.IsSending)"
+			        style="@ScopeBtnStyle(_customerScoped)">
+				@(_customerScoped ? "✓ Scoped" : "Scope to this")
+			</button>
+		</div>
+		<MokaJsonViewer @ref="_scopedViewer1" Json="@_customerJson" Height="300px"
+		                Theme="MokaJsonTheme.Dark" MaxDepthExpanded="3"
+		                ContextMenuActions="_scopedContextActions"/>
+	</div>
+	<div style="flex: 1;">
+		<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+			<h4 style="margin: 0;">📦 Order Record</h4>
+			<button @onclick="ToggleOrderScope"
+			        disabled="@(_scopedPanel is null || _scopedPanel.IsSending)"
+			        style="@ScopeBtnStyle(_orderScoped)">
+				@(_orderScoped ? "✓ Scoped" : "Scope to this")
+			</button>
+		</div>
+		<MokaJsonViewer @ref="_scopedViewer2" Json="@_orderJson" Height="300px"
+		                Theme="MokaJsonTheme.Dark" MaxDepthExpanded="3"
+		                ContextMenuActions="_scopedContextActions"/>
+	</div>
+</div>
+<div style="display: flex; align-items: center; gap: 8px; margin-bottom: 8px;">
+	<span style="font-size: 13px; color: #888;">
+		Active scope:
+		@if (_customerScoped && _orderScoped)
+		{
+			<strong style="color: #0ea5e9;">Customer + Order</strong>
+		}
+		else if (_customerScoped)
+		{
+			<strong style="color: #0ea5e9;">Customer</strong>
+		}
+		else if (_orderScoped)
+		{
+			<strong style="color: #0ea5e9;">Order</strong>
+		}
+		else
+		{
+			<strong style="color: #999;">None (full document)</strong>
+		}
+	</span>
+	@if (_customerScoped || _orderScoped)
+	{
+		<button @onclick="ClearScopeDemo" style="padding: 2px 10px; font-size: 12px; cursor: pointer; border: 1px solid #ddd; border-radius: 4px; background: #fff;">
+			Clear all
+		</button>
+	}
+</div>
+<MokaJsonAiPanel @ref="_scopedPanel" Viewer="_activeViewer" MessagesHeight="350px"/>

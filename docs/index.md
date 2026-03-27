@@ -32,7 +32,8 @@ builder.Services.AddMokaJsonViewer();
 - **Context menu** — built-in actions + extensible custom actions with type/property filtering
 - **Lazy parsing** — documents over 50 MB use byte-offset indexing with on-demand subtree parsing
 - **Streaming search** — search large documents without loading the full DOM
-- **Zero dependencies** — built on `System.Text.Json`
+- **AI assistant** — optional AI chat panel for JSON analysis, summarization, and transformation
+- **Zero dependencies** — core library built on `System.Text.Json`
 
 ## Packages
 
@@ -40,10 +41,12 @@ builder.Services.AddMokaJsonViewer();
 |---------|-------------|
 | [Moka.Blazor.Json](https://www.nuget.org/packages/Moka.Blazor.Json) | Main component library |
 | [Moka.Blazor.Json.Abstractions](https://www.nuget.org/packages/Moka.Blazor.Json.Abstractions) | Interfaces and models for programmatic access |
+| [Moka.Blazor.Json.AI](https://www.nuget.org/packages/Moka.Blazor.Json.AI) | AI assistant panel for JSON analysis (LM Studio, Ollama, ONNX, or custom) |
 | [Moka.Blazor.Json.Diagnostics](https://www.nuget.org/packages/Moka.Blazor.Json.Diagnostics) | Debug overlay for lazy parsing diagnostics |
 
 ## Next Steps
 
 - [Getting Started](guide/getting-started.md) — installation, setup, and basic usage
 - [Configuration](guide/configuration.md) — global options and collapse modes
+- [AI Assistant](guide/ai-assistant.md) — set up the AI chat panel
 - [API Reference](/api) — full API documentation

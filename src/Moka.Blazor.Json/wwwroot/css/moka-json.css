@@ -600,6 +600,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 8px;
     padding: 32px;
     color: var(--moka-json-color-null);
 }

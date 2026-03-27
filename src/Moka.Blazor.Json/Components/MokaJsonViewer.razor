@@ -1,10 +1,12 @@
 @namespace Moka.Blazor.Json.Components
 
+<HeadContent>
+	<link href="_content/Moka.Blazor.Json/css/moka-json.css" rel="stylesheet"/>
+</HeadContent>
+
 <div class="moka-json-viewer @(WordWrap ? "moka-json-viewer--word-wrap" : "")" @ref="_viewerRef" style="@HeightStyle" @attributes="AdditionalAttributes"
      data-moka-json-theme="@ThemeAttribute"
      @onkeydown="HandleKeyDown">
-
-	<link href="_content/Moka.Blazor.Json/css/moka-json.css" rel="stylesheet"/>
 
 	@if (_toastMessage is not null)
 	{
@@ -23,7 +25,10 @@
 	}
 	else if (!_isLoaded && _isLoading)
 	{
-		<div class="moka-json-loading">Loading...</div>
+		<div class="moka-json-loading">
+			<span class="moka-json-busy-spinner"></span>
+			Loading...
+		</div>
 	}
 	else if (_isLoaded)
 	{

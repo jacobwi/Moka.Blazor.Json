@@ -347,6 +347,13 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		_treeFlattener.ClearSearchMatches();
 		_scopedPath = null;
 
+		// Yield so Blazor renders the loading spinner before parsing begins.
+		// ParseAsync(string) completes synchronously, so without this yield
+		// the component would block through the entire parse without ever
+		// showing the loading state.
+		StateHasChanged();
+		await Task.Yield();
+
 		try
 		{
 			if (_documentSource is not null)
@@ -396,8 +403,6 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 					// Offload parsing to background thread so UI stays responsive
 					if (byteCount > OptionsAccessor.Value.BackgroundStatsThresholdBytes)
 					{
-						// Show loading state before expensive parse
-						StateHasChanged();
 						await Task.Run(() => manager.ParseAsync(json));
 					}
 					else
