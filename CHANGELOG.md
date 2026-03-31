@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.2] - 2026-03-31
+
+### ✨ New
+- `AggressiveCleanup` option — opt-in full GC collection + LOH compaction on viewer dispose for reclaiming memory from large documents
+
+### 🐛 Fixed
+- Context menu `RawValue` now populated for container nodes (objects/arrays), fixing null data in custom context menu actions
+- bUnit component tests updated to wait for async loading (`Task.Yield()`)
+
 ## [0.4.0] - 2026-03-27
 
 ### ✨ New
@@ -46,5 +55,7 @@
 - MokaDocs documentation site
 - Demo app with interactive toolbar mode/theme switchers
 
+[0.4.2]: https://github.com/jacobwi/Moka.Blazor.Json/compare/v0.4.0...v0.4.2
+[0.4.0]: https://github.com/jacobwi/Moka.Blazor.Json/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/jacobwi/Moka.Blazor.Json/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jacobwi/Moka.Blazor.Json/releases/tag/v0.2.0
