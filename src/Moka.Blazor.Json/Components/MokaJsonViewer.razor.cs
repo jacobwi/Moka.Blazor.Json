@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime;
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Components;
@@ -56,6 +57,14 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		if (_contextMenu is not null)
 		{
 			await _contextMenu.DisposeAsync();
+		}
+
+		if (OptionsAccessor.Value.AggressiveCleanup)
+		{
+			GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+			GC.Collect();
+			GC.WaitForPendingFinalizers();
+			GC.Collect();
 		}
 	}
 

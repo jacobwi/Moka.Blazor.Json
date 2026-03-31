@@ -33,6 +33,27 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		return cut;
 	}
 
+	#region Disposal
+
+	[Fact]
+	public async Task AggressiveCleanup_Enabled_Does_Not_Throw_On_Dispose()
+	{
+		await using BunitContext ctx = new();
+		ctx.JSInterop.Mode = JSRuntimeMode.Loose;
+		ctx.Services.AddMokaJsonViewer(opts => opts.AggressiveCleanup = true);
+
+		IRenderedComponent<MokaJsonViewer> cut = ctx.Render<MokaJsonViewer>(p => p
+			.Add(v => v.Json, """{"name":"test","items":[1,2,3]}""")
+			.Add(v => v.MaxDepthExpanded, 2));
+
+		cut.WaitForState(() => cut.FindAll(".moka-json-loading").Count == 0, TimeSpan.FromSeconds(3));
+
+		// Disposing should trigger GC.Collect without throwing
+		await ctx.DisposeAsync();
+	}
+
+	#endregion
+
 	#region Context Menu Data
 
 	[Fact]

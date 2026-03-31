@@ -71,4 +71,11 @@ public sealed class MokaJsonViewerOptions
 	///     Default is <c>true</c>.
 	/// </summary>
 	public bool ShowSettingsButton { get; set; } = true;
+
+	/// <summary>
+	///     When <c>true</c>, forces a full garbage collection (all generations + LOH compaction)
+	///     after the viewer disposes its document and caches. Useful for applications that load
+	///     large JSON documents and need to reclaim memory promptly. Default is <c>false</c>.
+	/// </summary>
+	public bool AggressiveCleanup { get; set; }
 }

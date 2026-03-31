@@ -36,6 +36,7 @@ builder.Services.AddMokaJsonViewer(options =>
 | `BackgroundStatsThresholdBytes` | `long` | 10 MB | Size threshold for background stats calculation |
 | `MaxClipboardSizeBytes` | `long` | 50 MB | Maximum size for clipboard copy |
 | `ShowSettingsButton` | `bool` | `true` | Whether the settings gear icon is shown in the toolbar |
+| `AggressiveCleanup` | `bool` | `false` | Forces full GC + LOH compaction when the viewer is disposed |
 
 ## Settings Panel
 
