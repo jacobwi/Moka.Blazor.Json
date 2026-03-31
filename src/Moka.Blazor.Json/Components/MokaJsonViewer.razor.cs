@@ -986,10 +986,8 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			string[] segments = args.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 			string? propName = segments.Length > 0 ? segments[^1].Replace("~1", "/").Replace("~0", "~") : null;
 
-			// For containers, defer GetRawText — serializing a large subtree just to
-			// populate the context menu is wasteful. Copy Value will fetch on demand.
+			string rawText = element.GetRawText();
 			bool isContainer = element.ValueKind is JsonValueKind.Object or JsonValueKind.Array;
-			string rawText = isContainer ? "" : element.GetRawText();
 			string preview = isContainer
 				? $"{_documentSource.GetChildCount(args.Path)} items"
 				: TruncatePreview(rawText);

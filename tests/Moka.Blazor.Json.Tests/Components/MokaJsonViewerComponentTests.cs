@@ -59,6 +59,43 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		Assert.True(selectedArgs.RawValuePreview.Length <= 503); // 500 + "..."
 	}
 
+	[Fact]
+	public void Context_Menu_RawValue_Is_Populated_For_Container_Nodes()
+	{
+		string? capturedRawValue = null;
+
+		var customAction = new MokaJsonContextAction
+		{
+			Id = "capture-raw",
+			Label = "Capture",
+			OnExecute = ctx =>
+			{
+				capturedRawValue = ctx.RawValue;
+				return ValueTask.CompletedTask;
+			}
+		};
+
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
+			.Add(v => v.Json, """{"nested":{"a":1,"b":2}}""")
+			.Add(v => v.MaxDepthExpanded, 2)
+			.Add(v => v.ContextMenuActions, new List<MokaJsonContextAction> { customAction }));
+
+		// Right-click the "nested" object node
+		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node");
+		IElement nestedNode = nodes.First(n => n.TextContent.Contains("nested") && n.TextContent.Contains('{'));
+		nestedNode.ContextMenu();
+
+		// Click the custom action
+		IReadOnlyList<IElement> menuItems = cut.FindAll(".moka-json-context-item");
+		IElement captureItem = menuItems.First(m => m.TextContent.Contains("Capture"));
+		captureItem.Click();
+
+		Assert.NotNull(capturedRawValue);
+		Assert.NotEmpty(capturedRawValue);
+		Assert.Contains("\"a\"", capturedRawValue);
+		Assert.Contains("\"b\"", capturedRawValue);
+	}
+
 	#endregion
 
 	#region Rendering & Parameters
