@@ -245,6 +245,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	private int _selectedDepth;
 	private bool _isLoaded;
 	private bool _isLoading;
+	private bool _cssReady;
 	private bool _isFormatted = true;
 	private string? _errorMessage;
 	private string? _previousJson;
@@ -300,6 +301,8 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	private string HeightStyle => $"height: {Height}";
 
+	private string ComputedStyle => _cssReady ? HeightStyle : $"visibility:hidden;{HeightStyle}";
+
 	private MokaJsonToolbarMode EffectiveToolbarMode =>
 		ToolbarMode ?? OptionsAccessor.Value.DefaultToolbarMode;
 
@@ -326,6 +329,16 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	/// <inheritdoc />
 	protected override void OnInitialized() => BuildContextActions();
+
+	/// <inheritdoc />
+	protected override void OnAfterRender(bool firstRender)
+	{
+		if (firstRender && !_cssReady)
+		{
+			_cssReady = true;
+			StateHasChanged();
+		}
+	}
 
 	/// <inheritdoc />
 	protected override async Task OnParametersSetAsync()
@@ -409,15 +422,9 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 						LoggerFactory.CreateLogger<JsonDocumentManager>(),
 						OptionsAccessor);
 
-					// Offload parsing to background thread so UI stays responsive
-					if (byteCount > OptionsAccessor.Value.BackgroundStatsThresholdBytes)
-					{
-						await Task.Run(() => manager.ParseAsync(json));
-					}
-					else
-					{
-						await manager.ParseAsync(json);
-					}
+					// Always offload parsing to a background thread so the UI stays responsive.
+					// Even small documents benefit since JsonDocument.Parse is synchronous.
+					await Task.Run(() => manager.ParseAsync(json));
 
 					_documentManager = manager;
 					_documentSource = manager;
@@ -446,19 +453,9 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 						LoggerFactory.CreateLogger<JsonDocumentManager>(),
 						OptionsAccessor);
 
-					// Offload stream parsing to background thread so UI stays responsive
-					bool isLargeStream = JsonStream.CanSeek &&
-					                     JsonStream.Length > OptionsAccessor.Value.BackgroundStatsThresholdBytes;
-					if (isLargeStream)
-					{
-						StateHasChanged();
-						Stream stream = JsonStream;
-						await Task.Run(() => manager.ParseAsync(stream));
-					}
-					else
-					{
-						await manager.ParseAsync(JsonStream);
-					}
+					// Always offload stream parsing to a background thread.
+					Stream stream = JsonStream;
+					await Task.Run(() => manager.ParseAsync(stream));
 
 					_documentManager = manager;
 					_documentSource = manager;
@@ -485,69 +482,53 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 				_ => MaxDepthExpanded
 			};
 
-			// Offload tree expansion and flattening to a background thread for large documents
+			// Always offload tree expansion and flattening to a background thread
 			// so the UI remains responsive during initial load.
-			if (source.DocumentSizeBytes >= OptionsAccessor.Value.BackgroundStatsThresholdBytes)
-			{
-				_flatNodes = await Task.Run(() =>
-				{
-					_treeFlattener.ExpandToDepth(source, expandDepth);
-					return _treeFlattener.Flatten(source);
-				});
-			}
-			else
+			_flatNodes = await Task.Run(() =>
 			{
 				_treeFlattener.ExpandToDepth(source, expandDepth);
-				_flatNodes = _treeFlattener.Flatten(source);
-			}
+				return _treeFlattener.Flatten(source);
+			});
 
 			_documentSize = JsonDocumentManager.FormatBytes(source.DocumentSizeBytes);
 			_parseTimeMs = $"{source.ParseTime.TotalMilliseconds:F1} ms";
 
-			// For large documents, defer expensive stats to a background thread
-			if (source.DocumentSizeBytes < OptionsAccessor.Value.BackgroundStatsThresholdBytes)
+			// Always compute stats on a background thread to keep the UI responsive.
+			_nodeCount = -1;
+			_maxDepth = -1;
+			if (_statsCts is not null)
 			{
-				_nodeCount = source.CountNodes();
-				_maxDepth = source.GetMaxDepth();
+				await _statsCts.CancelAsync();
+				_statsCts.Dispose();
 			}
-			else
+
+			CancellationTokenSource cts = _statsCts = new CancellationTokenSource();
+			_ = Task.Run(() =>
 			{
-				_nodeCount = -1;
-				_maxDepth = -1;
-				if (_statsCts is not null)
+				if (cts.Token.IsCancellationRequested)
 				{
-					await _statsCts.CancelAsync();
-					_statsCts.Dispose();
+					return;
 				}
 
-				CancellationTokenSource cts = _statsCts = new CancellationTokenSource();
-				_ = Task.Run(() =>
+				int nc = source.CountNodes();
+				int md = source.GetMaxDepth();
+				if (cts.Token.IsCancellationRequested)
+				{
+					return;
+				}
+
+				_ = InvokeAsync(() =>
 				{
 					if (cts.Token.IsCancellationRequested)
 					{
 						return;
 					}
 
-					int nc = source.CountNodes();
-					int md = source.GetMaxDepth();
-					if (cts.Token.IsCancellationRequested)
-					{
-						return;
-					}
-
-					_ = InvokeAsync(() =>
-					{
-						if (cts.Token.IsCancellationRequested)
-						{
-							return;
-						}
-
-						_nodeCount = nc;
-						_maxDepth = md;
-						StateHasChanged();
-					});
-				}, cts.Token);
-			}
+					_nodeCount = nc;
+					_maxDepth = md;
+					StateHasChanged();
+				});
+			}, cts.Token);
 
 			_isValid = true;
 			_validationError = null;
@@ -681,42 +662,33 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		}
 
 		IJsonDocumentSource source = _documentSource;
-		bool isLarge = source.DocumentSizeBytes >= OptionsAccessor.Value.BackgroundStatsThresholdBytes;
 
-		if (isLarge)
+		// Cancel any in-flight tree operation
+		await CancelTreeOperationAsync();
+		_isBusy = true;
+		_busyMessage = "Expanding all nodes...";
+		StateHasChanged();
+
+		CancellationTokenSource cts = _treeCts = new CancellationTokenSource();
+		try
 		{
-			// Cancel any in-flight tree operation
-			await CancelTreeOperationAsync();
-			_isBusy = true;
-			_busyMessage = "Expanding all nodes...";
-			StateHasChanged();
-
-			CancellationTokenSource cts = _treeCts = new CancellationTokenSource();
-			try
+			await Task.Run(() => _treeFlattener.ExpandAll(source), cts.Token);
+			if (!cts.Token.IsCancellationRequested)
 			{
-				await Task.Run(() => _treeFlattener.ExpandAll(source), cts.Token);
-				if (!cts.Token.IsCancellationRequested)
-				{
-					await RefreshFlatNodesAsync();
-				}
-			}
-			catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
-			{
-			}
-			finally
-			{
-				if (_treeCts == cts)
-				{
-					_isBusy = false;
-					_busyMessage = null;
-					StateHasChanged();
-				}
+				await RefreshFlatNodesAsync();
 			}
 		}
-		else
+		catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
 		{
-			_treeFlattener.ExpandAll(source);
-			RefreshFlatNodes();
+		}
+		finally
+		{
+			if (_treeCts == cts)
+			{
+				_isBusy = false;
+				_busyMessage = null;
+				StateHasChanged();
+			}
 		}
 	}
 
@@ -727,48 +699,36 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			return;
 		}
 
-		IJsonDocumentSource source = _documentSource;
-		bool isLarge = source.DocumentSizeBytes >= OptionsAccessor.Value.BackgroundStatsThresholdBytes;
+		// Cancel any in-flight tree operation
+		await CancelTreeOperationAsync();
+		_isBusy = true;
+		_busyMessage = "Collapsing...";
+		StateHasChanged();
 
-		if (isLarge)
+		CancellationTokenSource cts = _treeCts = new CancellationTokenSource();
+		try
 		{
-			// Cancel any in-flight tree operation
-			await CancelTreeOperationAsync();
-			_isBusy = true;
-			_busyMessage = "Collapsing...";
-			StateHasChanged();
-
-			CancellationTokenSource cts = _treeCts = new CancellationTokenSource();
-			try
+			await Task.Run(() =>
 			{
-				await Task.Run(() =>
-				{
-					_treeFlattener.CollapseAll();
-					_treeFlattener.Expand("");
-				}, cts.Token);
-				if (!cts.Token.IsCancellationRequested)
-				{
-					await RefreshFlatNodesAsync();
-				}
-			}
-			catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
+				_treeFlattener.CollapseAll();
+				_treeFlattener.Expand("");
+			}, cts.Token);
+			if (!cts.Token.IsCancellationRequested)
 			{
-			}
-			finally
-			{
-				if (_treeCts == cts)
-				{
-					_isBusy = false;
-					_busyMessage = null;
-					StateHasChanged();
-				}
+				await RefreshFlatNodesAsync();
 			}
 		}
-		else
+		catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException)
 		{
-			_treeFlattener.CollapseAll();
-			_treeFlattener.Expand("");
-			RefreshFlatNodes();
+		}
+		finally
+		{
+			if (_treeCts == cts)
+			{
+				_isBusy = false;
+				_busyMessage = null;
+				StateHasChanged();
+			}
 		}
 	}
 
@@ -821,23 +781,23 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	#region Search Handlers
 
-	private void HandleSearchQueryChanged(string query)
+	private async Task HandleSearchQueryChanged(string query)
 	{
 		_searchQuery = query;
 
 		int debounceMs = OptionsAccessor.Value.SearchDebounceMs;
 		if (debounceMs <= 0)
 		{
-			ExecuteSearch();
+			await ExecuteSearchAsync();
 			return;
 		}
 
 		_searchDebounceTimer?.Dispose();
 		_searchDebounceTimer = new Timer(_ =>
 		{
-			_ = InvokeAsync(() =>
+			_ = InvokeAsync(async () =>
 			{
-				ExecuteSearch();
+				await ExecuteSearchAsync();
 				StateHasChanged();
 			});
 		}, null, debounceMs, Timeout.Infinite);
@@ -865,35 +825,44 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		}
 	}
 
-	private void HandleCaseSensitiveChanged(bool value)
+	private async Task HandleCaseSensitiveChanged(bool value)
 	{
 		_searchCaseSensitive = value;
-		ExecuteSearch();
+		await ExecuteSearchAsync();
 	}
 
-	private void HandleRegexChanged(bool value)
+	private async Task HandleRegexChanged(bool value)
 	{
 		_searchUseRegex = value;
-		ExecuteSearch();
+		await ExecuteSearchAsync();
 	}
 
-	private void ExecuteSearch()
+	private async Task ExecuteSearchAsync()
 	{
 		if (_documentSource is null || string.IsNullOrEmpty(_searchQuery))
 		{
 			_searchEngine.Clear();
 			_treeFlattener.ClearSearchMatches();
-			RefreshFlatNodes();
+			await RefreshFlatNodesAsync();
 			return;
 		}
 
+		IJsonDocumentSource source = _documentSource;
+		string query = _searchQuery;
 		var options = new JsonSearchOptions
 		{
 			CaseSensitive = _searchCaseSensitive,
 			UseRegex = _searchUseRegex
 		};
 
-		_searchEngine.Search(_documentSource, _searchQuery, options);
+		try
+		{
+			await Task.Run(() => _searchEngine.Search(source, query, options));
+		}
+		catch (ObjectDisposedException)
+		{
+			return;
+		}
 
 		if (_searchEngine.ActiveMatchPath is not null)
 		{
@@ -901,7 +870,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		}
 
 		_treeFlattener.SetSearchMatches(_searchEngine.MatchPaths, _searchEngine.ActiveMatchPath);
-		RefreshFlatNodes();
+		await RefreshFlatNodesAsync();
 	}
 
 	#endregion
@@ -915,32 +884,14 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			return;
 		}
 
-		bool isLarge = _documentSource.DocumentSizeBytes >= OptionsAccessor.Value.BackgroundStatsThresholdBytes;
 		_treeFlattener.ToggleExpand(path);
 
-		if (isLarge)
+		try
 		{
-			_isBusy = true;
-			_busyMessage = "Loading...";
-			StateHasChanged();
-
-			try
-			{
-				await RefreshFlatNodesAsync();
-			}
-			catch (ObjectDisposedException)
-			{
-			}
-			finally
-			{
-				_isBusy = false;
-				_busyMessage = null;
-				StateHasChanged();
-			}
+			await RefreshFlatNodesAsync();
 		}
-		else
+		catch (ObjectDisposedException)
 		{
-			RefreshFlatNodes();
 		}
 	}
 
@@ -1721,47 +1672,32 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		}
 
 		IJsonDocumentSource source = _documentSource;
-		bool isLarge = source.DocumentSizeBytes >= OptionsAccessor.Value.BackgroundStatsThresholdBytes;
 
-		if (isLarge)
+		await CancelTreeOperationAsync();
+		_isBusy = true;
+		_busyMessage = "Expanding subtree...";
+		StateHasChanged();
+
+		CancellationTokenSource cts = _treeCts = new CancellationTokenSource();
+		try
 		{
-			await CancelTreeOperationAsync();
-			_isBusy = true;
-			_busyMessage = "Expanding subtree...";
-			StateHasChanged();
-
-			CancellationTokenSource cts = _treeCts = new CancellationTokenSource();
-			try
+			await Task.Run(() => ExpandSubtreeRecursive(source, path), cts.Token);
+			if (!cts.Token.IsCancellationRequested)
 			{
-				await Task.Run(() => ExpandSubtreeRecursive(source, path), cts.Token);
-				if (!cts.Token.IsCancellationRequested)
-				{
-					await RefreshFlatNodesAsync();
-				}
-			}
-			catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException
-				                           or KeyNotFoundException)
-			{
-			}
-			finally
-			{
-				if (_treeCts == cts)
-				{
-					_isBusy = false;
-					_busyMessage = null;
-					StateHasChanged();
-				}
+				await RefreshFlatNodesAsync();
 			}
 		}
-		else
+		catch (Exception ex) when (ex is OperationCanceledException or ObjectDisposedException
+			                           or KeyNotFoundException)
 		{
-			try
+		}
+		finally
+		{
+			if (_treeCts == cts)
 			{
-				ExpandSubtreeRecursive(source, path);
-				RefreshFlatNodes();
-			}
-			catch (KeyNotFoundException)
-			{
+				_isBusy = false;
+				_busyMessage = null;
+				StateHasChanged();
 			}
 		}
 	}

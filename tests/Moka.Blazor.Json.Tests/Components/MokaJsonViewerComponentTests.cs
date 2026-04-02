@@ -22,14 +22,19 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 
 	/// <summary>
 	///     Renders a <see cref="MokaJsonViewer" /> and waits for async loading to complete.
-	///     The component uses Task.Yield() during load, so bUnit needs to wait for the
-	///     loading state to resolve before tests can query the DOM.
+	///     Parsing, flattening, and stats are offloaded to Task.Run, so bUnit needs to wait
+	///     until the tree viewport or error element appears in the DOM.
 	/// </summary>
 	private IRenderedComponent<MokaJsonViewer> RenderViewer(
 		Action<ComponentParameterCollectionBuilder<MokaJsonViewer>> configure)
 	{
 		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render(configure);
-		cut.WaitForState(() => cut.FindAll(".moka-json-loading").Count == 0, TimeSpan.FromSeconds(3));
+		// Wait for the component to finish all async work (parse, flatten, stats)
+		// and render the tree with at least one node, or show an error.
+		cut.WaitForState(() =>
+				cut.FindAll(".moka-json-node").Count > 0 ||
+				cut.FindAll(".moka-json-error").Count > 0,
+			TimeSpan.FromSeconds(5));
 		return cut;
 	}
 
@@ -74,9 +79,9 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node");
 		IElement dataNode = nodes.First(n => n.TextContent.Contains("data"));
 		dataNode.Click();
+		cut.WaitForState(() => selectedArgs is not null, TimeSpan.FromSeconds(3));
 
-		Assert.NotNull(selectedArgs);
-		Assert.Contains(longValue, selectedArgs.RawValue);
+		Assert.Contains(longValue, selectedArgs!.RawValue);
 		Assert.True(selectedArgs.RawValuePreview.Length <= 503); // 500 + "..."
 	}
 
@@ -105,14 +110,14 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node");
 		IElement nestedNode = nodes.First(n => n.TextContent.Contains("nested") && n.TextContent.Contains('{'));
 		nestedNode.ContextMenu();
+		cut.WaitForState(() => cut.FindAll(".moka-json-context-item").Count > 0, TimeSpan.FromSeconds(3));
 
 		// Click the custom action
 		IReadOnlyList<IElement> menuItems = cut.FindAll(".moka-json-context-item");
 		IElement captureItem = menuItems.First(m => m.TextContent.Contains("Capture"));
 		captureItem.Click();
-
-		Assert.NotNull(capturedRawValue);
-		Assert.NotEmpty(capturedRawValue);
+		cut.WaitForState(() => capturedRawValue is not null, TimeSpan.FromSeconds(3));
+		Assert.NotEmpty(capturedRawValue!);
 		Assert.Contains("\"a\"", capturedRawValue);
 		Assert.Contains("\"b\"", capturedRawValue);
 	}
@@ -261,8 +266,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		Assert.True(nodes.Count > 0);
 
 		nodes[0].Click();
-
-		Assert.NotNull(selectedArgs);
+		cut.WaitForState(() => selectedArgs is not null, TimeSpan.FromSeconds(3));
 	}
 
 	#endregion
@@ -299,9 +303,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		IReadOnlyList<IElement> buttons = cut.FindAll(".moka-json-toolbar button");
 		IElement expandButton = buttons.First(b => b.TextContent.Contains("Expand"));
 		expandButton.Click();
-
-		int expandedNodeCount = cut.FindAll(".moka-json-node").Count;
-		Assert.True(expandedNodeCount > initialNodeCount);
+		cut.WaitForState(() => cut.FindAll(".moka-json-node").Count > initialNodeCount, TimeSpan.FromSeconds(5));
 	}
 
 	[Fact]
@@ -316,10 +318,8 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		IReadOnlyList<IElement> buttons = cut.FindAll(".moka-json-toolbar button");
 		IElement collapseButton = buttons.First(b => b.TextContent.Contains("Collapse"));
 		collapseButton.Click();
-
+		cut.WaitForState(() => cut.FindAll(".moka-json-node").Count < expandedNodeCount, TimeSpan.FromSeconds(5));
 		int collapsedNodeCount = cut.FindAll(".moka-json-node").Count;
-		// Collapse keeps only root expanded — all children collapsed
-		Assert.True(collapsedNodeCount < expandedNodeCount);
 		// Root bracket + collapsed children + closing bracket should still be visible
 		Assert.True(collapsedNodeCount >= 2);
 	}
@@ -346,8 +346,9 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 			.Add(v => v.Json, """{"a":1,"b":2}""")
 			.Add(v => v.ShowBottomBar, true));
 
-		IElement bottomBar = cut.Find(".moka-json-bottom-bar");
-		Assert.Contains("nodes", bottomBar.TextContent);
+		// Stats are computed on a background thread; wait for them to appear
+		cut.WaitForState(() => cut.Find(".moka-json-bottom-bar").TextContent.Contains("nodes"),
+			TimeSpan.FromSeconds(5));
 	}
 
 	[Fact]
@@ -487,8 +488,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		valueNode.DoubleClick();
 
 		// Should show inline edit input
-		IReadOnlyList<IElement> inputs = cut.FindAll(".moka-json-inline-edit");
-		Assert.True(inputs.Count > 0);
+		cut.WaitForState(() => cut.FindAll(".moka-json-inline-edit").Count > 0, TimeSpan.FromSeconds(3));
 	}
 
 	[Fact]
@@ -503,6 +503,8 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		IElement valueNode = nodes.First(n => n.TextContent.Contains("Alice"));
 		valueNode.DoubleClick();
 
+		// Small delay to ensure no async side effects
+		Thread.Sleep(50);
 		Assert.Empty(cut.FindAll(".moka-json-inline-edit"));
 	}
 
@@ -518,6 +520,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node--editable");
 		IElement valueNode = nodes.First(n => n.TextContent.Contains("Alice"));
 		valueNode.ContextMenu();
+		cut.WaitForState(() => cut.FindAll(".moka-json-context-item").Count > 0, TimeSpan.FromSeconds(3));
 
 		// Context menu should contain edit-related actions
 		string markup = cut.Markup;
@@ -537,6 +540,8 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node");
 		IElement valueNode = nodes.First(n => n.TextContent.Contains("Alice"));
 		valueNode.ContextMenu();
+		// Wait for context menu to render (read-only shows Copy Path, Copy Value, etc.)
+		cut.WaitForState(() => cut.FindAll(".moka-json-context-item").Count > 0, TimeSpan.FromSeconds(3));
 
 		string markup = cut.Markup;
 		Assert.DoesNotContain("Edit Value", markup);
@@ -558,20 +563,22 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node--editable");
 		IElement valueNode = nodes.First(n => n.TextContent.Contains("Alice"));
 		valueNode.DoubleClick();
+		cut.WaitForState(() => cut.FindAll(".moka-json-inline-edit").Count > 0, TimeSpan.FromSeconds(3));
 
 		// Find the inline edit input and change its value
 		IElement input = cut.Find(".moka-json-inline-edit");
 		input.Input("Bob");
 		input.KeyDown("Enter");
+		cut.WaitForState(() => changedJson is not null, TimeSpan.FromSeconds(3));
 
-		Assert.NotNull(changedJson);
-		Assert.Contains("Bob", changedJson);
+		Assert.Contains("Bob", changedJson!);
 	}
 
 	[Fact]
 	public void Bind_Json_Updates_After_Edit()
 	{
 		string? boundJson = """{"count":10}""";
+		string? originalJson = boundJson;
 
 		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
 			.Add(v => v.Json, boundJson)
@@ -583,11 +590,13 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node--editable");
 		IElement valueNode = nodes.First(n => n.TextContent.Contains("10"));
 		valueNode.DoubleClick();
+		cut.WaitForState(() => cut.FindAll(".moka-json-inline-edit").Count > 0, TimeSpan.FromSeconds(3));
 
 		// Edit the value
 		IElement input = cut.Find(".moka-json-inline-edit");
 		input.Input("99");
 		input.KeyDown("Enter");
+		cut.WaitForState(() => boundJson != originalJson, TimeSpan.FromSeconds(3));
 
 		Assert.NotNull(boundJson);
 		Assert.Contains("99", boundJson);
@@ -608,14 +617,15 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node--editable");
 		IElement ageNode = nodes.First(n => n.TextContent.Contains("age") && n.TextContent.Contains("30"));
 		ageNode.ContextMenu();
+		cut.WaitForState(() => cut.FindAll(".moka-json-context-item").Count > 0, TimeSpan.FromSeconds(3));
 
 		// Click Delete
 		IReadOnlyList<IElement> menuItems = cut.FindAll(".moka-json-context-item");
 		IElement deleteItem = menuItems.First(m => m.TextContent.Contains("Delete"));
 		deleteItem.Click();
+		cut.WaitForState(() => changedJson is not null, TimeSpan.FromSeconds(3));
 
-		Assert.NotNull(changedJson);
-		Assert.DoesNotContain("age", changedJson);
+		Assert.DoesNotContain("age", changedJson!);
 	}
 
 	[Fact]
@@ -633,14 +643,15 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		IReadOnlyList<IElement> nodes = cut.FindAll(".moka-json-node--editable");
 		IElement rootNode = nodes[0];
 		rootNode.ContextMenu();
+		cut.WaitForState(() => cut.FindAll(".moka-json-context-item").Count > 0, TimeSpan.FromSeconds(3));
 
 		// Click "Add Property"
 		IReadOnlyList<IElement> menuItems = cut.FindAll(".moka-json-context-item");
 		IElement addItem = menuItems.First(m => m.TextContent.Contains("Add Property"));
 		addItem.Click();
+		cut.WaitForState(() => changedJson is not null, TimeSpan.FromSeconds(3));
 
-		Assert.NotNull(changedJson);
-		Assert.Contains("newProperty", changedJson);
+		Assert.Contains("newProperty", changedJson!);
 	}
 
 	#endregion
@@ -749,10 +760,7 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		cut.Render(p => p
 			.Add(v => v.Json, """{"a":1,"b":2,"c":3,"d":4}"""));
 
-		cut.WaitForState(() => cut.FindAll(".moka-json-loading").Count == 0, TimeSpan.FromSeconds(3));
-
-		int newNodeCount = cut.FindAll(".moka-json-node").Count;
-		Assert.True(newNodeCount > initialNodeCount);
+		cut.WaitForState(() => cut.FindAll(".moka-json-node").Count > initialNodeCount, TimeSpan.FromSeconds(5));
 	}
 
 	[Fact]
