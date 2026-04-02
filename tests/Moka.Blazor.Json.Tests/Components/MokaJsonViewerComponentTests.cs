@@ -287,7 +287,8 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		IElement searchButton = cut.Find(".moka-json-toolbar button");
 		searchButton.Click();
 
-		// Search overlay should now be visible
+		// Search overlay should now be visible (may need async render)
+		cut.WaitForState(() => cut.FindAll(".moka-json-search").Count > 0, TimeSpan.FromSeconds(3));
 		Assert.Single(cut.FindAll(".moka-json-search"));
 	}
 
