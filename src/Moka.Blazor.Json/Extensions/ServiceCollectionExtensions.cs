@@ -1,7 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Moka.Blazor.Json.Interop;
 using Moka.Blazor.Json.Models;
-using Moka.Blazor.Json.Services;
 
 namespace Moka.Blazor.Json.Extensions;
 
@@ -29,9 +28,6 @@ public static class ServiceCollectionExtensions
 		Action<MokaJsonViewerOptions> configure)
 	{
 		services.Configure(configure);
-		services.AddTransient<JsonDocumentManager>();
-		services.AddTransient<JsonTreeFlattener>();
-		services.AddTransient<JsonSearchEngine>();
 		services.AddScoped<MokaJsonInterop>();
 		return services;
 	}

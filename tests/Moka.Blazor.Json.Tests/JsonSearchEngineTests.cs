@@ -88,4 +88,37 @@ public sealed class JsonSearchEngineTests
 		Assert.Equal(0, _engine.MatchCount);
 		Assert.Equal(-1, _engine.ActiveMatchIndex);
 	}
+
+	[Fact]
+	public void Search_Unicode_FindsMatches()
+	{
+		using var doc = JsonDocument.Parse("""{"name":"日本語テスト","city":"東京"}""");
+
+		int count = _engine.Search(doc.RootElement, "日本語");
+
+		Assert.Equal(1, count);
+		Assert.Equal("/name", _engine.MatchPaths[0]);
+	}
+
+	[Fact]
+	public void Search_Emoji_FindsMatches()
+	{
+		using var doc = JsonDocument.Parse("""{"status":"✅ done","icon":"🚀"}""");
+
+		int count = _engine.Search(doc.RootElement, "🚀");
+
+		Assert.Equal(1, count);
+		Assert.Equal("/icon", _engine.MatchPaths[0]);
+	}
+
+	[Fact]
+	public void Search_SpecialCharactersInKeys_FindsMatches()
+	{
+		using var doc = JsonDocument.Parse("""{"my.key":"val1","a/b":"val2","c~d":"val3"}""");
+
+		int count = _engine.Search(doc.RootElement, "my.key",
+			new JsonSearchOptions { SearchKeys = true, SearchValues = false });
+
+		Assert.Equal(1, count);
+	}
 }

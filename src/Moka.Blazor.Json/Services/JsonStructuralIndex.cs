@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using Moka.Blazor.Json.Utilities;
 
 namespace Moka.Blazor.Json.Services;
 
@@ -259,7 +260,7 @@ internal sealed class JsonStructuralIndex
 						: JsonValueKind.Array;
 
 					string childPath = currentPropertyName is not null
-						? $"{parentPath}/{EscapeJsonPointer(currentPropertyName)}"
+						? $"{parentPath}/{JsonPointerHelper.EscapeSegment(currentPropertyName)}"
 						: $"{parentPath}/{childIndex}";
 
 					long startOffset = baseOffset + reader.TokenStartIndex;
@@ -279,7 +280,7 @@ internal sealed class JsonStructuralIndex
 				default:
 				{
 					string childPath = currentPropertyName is not null
-						? $"{parentPath}/{EscapeJsonPointer(currentPropertyName)}"
+						? $"{parentPath}/{JsonPointerHelper.EscapeSegment(currentPropertyName)}"
 						: $"{parentPath}/{childIndex}";
 
 					JsonValueKind valueKind = reader.TokenType switch
@@ -322,8 +323,8 @@ internal sealed class JsonStructuralIndex
 		if (parentKind == JsonValueKind.Object && propertyName is not null)
 		{
 			return string.IsNullOrEmpty(parentPath)
-				? $"/{EscapeJsonPointer(propertyName)}"
-				: $"{parentPath}/{EscapeJsonPointer(propertyName)}";
+				? $"/{JsonPointerHelper.EscapeSegment(propertyName)}"
+				: $"{parentPath}/{JsonPointerHelper.EscapeSegment(propertyName)}";
 		}
 
 		// Array: use current child count as index (before increment)
@@ -331,8 +332,6 @@ internal sealed class JsonStructuralIndex
 			? $"/{childCount}"
 			: $"{parentPath}/{childCount}";
 	}
-
-	private static string EscapeJsonPointer(string segment) => segment.Replace("~", "~0").Replace("/", "~1");
 
 	/// <summary>
 	///     An entry in the structural index describing a single JSON node.

@@ -111,32 +111,68 @@ public sealed partial class MokaJsonNode : ComponentBase
 	                             && EditState.Path == Node.Path
 	                             && EditState.Target == InlineEditTarget.Key;
 
-	private string CssClass
+	// Precomputed CSS class strings indexed by 4 boolean flags (16 combinations).
+	// Flags: [0] IsSelected, [1] IsSearchMatch, [2] IsActiveSearchMatch, [3] IsEditable
+	private static readonly string[] CssClassLookup = BuildCssClassLookup();
+
+	private static string[] BuildCssClassLookup()
 	{
-		get
+		string[] table = new string[16];
+		for (int i = 0; i < 16; i++)
 		{
 			string css = "moka-json-node";
-			if (IsSelected)
+			if ((i & 1) != 0)
 			{
 				css += " moka-json-node--selected";
 			}
 
-			if (Node.IsSearchMatch)
+			if ((i & 2) != 0)
 			{
 				css += " moka-json-node--search-match";
 			}
 
-			if (Node.IsActiveSearchMatch)
+			if ((i & 4) != 0)
 			{
 				css += " moka-json-node--search-active";
 			}
 
-			if (!ReadOnly && !Node.IsClosingBracket)
+			if ((i & 8) != 0)
 			{
 				css += " moka-json-node--editable";
 			}
 
-			return css;
+			table[i] = css;
+		}
+
+		return table;
+	}
+
+	private string CssClass
+	{
+		get
+		{
+			int flags = 0;
+			if (IsSelected)
+			{
+				flags |= 1;
+			}
+
+			if (Node.IsSearchMatch)
+			{
+				flags |= 2;
+			}
+
+			if (Node.IsActiveSearchMatch)
+			{
+				flags |= 4;
+			}
+
+			if (!ReadOnly && !Node.IsClosingBracket)
+			{
+				flags |= 8;
+			}
+
+			return CssClassLookup[flags];
 		}
 	}
 

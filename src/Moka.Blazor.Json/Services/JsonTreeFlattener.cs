@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Moka.Blazor.Json.Models;
+using Moka.Blazor.Json.Utilities;
 
 namespace Moka.Blazor.Json.Services;
 
@@ -231,7 +232,7 @@ internal sealed class JsonTreeFlattener
 			int i = 0;
 			foreach (JsonProperty prop in element.EnumerateObject())
 			{
-				string childPath = $"{path}/{EscapeJsonPointer(prop.Name)}";
+				string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Name)}";
 				bool isLast = i == childCount - 1;
 				FlattenElement(prop.Value, childPath, prop.Name, depth + 1, !isLast, result);
 				i++;
@@ -303,8 +304,6 @@ internal sealed class JsonTreeFlattener
 		};
 	}
 
-	private static string EscapeJsonPointer(string segment) => segment.Replace("~", "~0").Replace("/", "~1");
-
 	private void ExpandToDepthRecursive(JsonElement element, string path, int currentDepth, int maxDepth)
 	{
 		if (element.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
@@ -323,7 +322,7 @@ internal sealed class JsonTreeFlattener
 		{
 			foreach (JsonProperty prop in element.EnumerateObject())
 			{
-				string childPath = $"{path}/{EscapeJsonPointer(prop.Name)}";
+				string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Name)}";
 				ExpandToDepthRecursive(prop.Value, childPath, currentDepth + 1, maxDepth);
 			}
 		}

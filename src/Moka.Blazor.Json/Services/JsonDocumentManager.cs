@@ -7,6 +7,7 @@ using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Moka.Blazor.Json.Models;
+using Moka.Blazor.Json.Utilities;
 
 namespace Moka.Blazor.Json.Services;
 
@@ -95,6 +96,12 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			throw new ArgumentException("JSON string cannot be null or whitespace.", nameof(json));
 		}
 
+		// Strip UTF-8 BOM if present (U+FEFF)
+		if (json.Length > 0 && json[0] == '\uFEFF')
+		{
+			json = json[1..];
+		}
+
 		int byteCount = Encoding.UTF8.GetByteCount(json);
 		if (byteCount > _options.MaxDocumentSizeBytes)
 		{
@@ -144,6 +151,9 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 					$"Document size ({FormatBytes(DocumentSizeBytes)}) exceeds the maximum allowed size ({FormatBytes(_options.MaxDocumentSizeBytes)}).");
 			}
 		}
+
+		// Skip UTF-8 BOM (0xEF 0xBB 0xBF) if present
+		await SkipBomAsync(stream, cancellationToken).ConfigureAwait(false);
 
 		// For non-seekable streams, wrap in a counting stream to track bytes read
 		using CountingStream? countingStream = !stream.CanSeek ? new CountingStream(stream) : null;
@@ -210,7 +220,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 
 		foreach (string segment in segments)
 		{
-			string unescaped = segment.Replace("~1", "/").Replace("~0", "~");
+			string unescaped = JsonPointerHelper.UnescapeSegment(segment);
 
 			if (current.ValueKind == JsonValueKind.Object)
 			{
@@ -308,7 +318,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			throw new InvalidOperationException("Parent is not an object.");
 		}
 
-		string oldKey = UnescapeSegment(GetLastSegment(jsonPointer));
+		string oldKey = JsonPointerHelper.UnescapeSegment(GetLastSegment(jsonPointer));
 
 		// Preserve insertion order by rebuilding
 		var entries = new List<KeyValuePair<string, JsonNode?>>();
@@ -360,7 +370,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			? root
 			: NavigateJsonNode(root, parentPath);
 
-		string lastSegment = UnescapeSegment(GetLastSegment(jsonPointer));
+		string lastSegment = JsonPointerHelper.UnescapeSegment(GetLastSegment(jsonPointer));
 
 		if (parentNode is JsonObject parentObj)
 		{
@@ -484,8 +494,8 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			foreach (JsonProperty prop in element.EnumerateObject())
 			{
 				string childPath = string.IsNullOrEmpty(path) || path == "/"
-					? $"/{EscapeJsonPointer(prop.Name)}"
-					: $"{path}/{EscapeJsonPointer(prop.Name)}";
+					? $"/{JsonPointerHelper.EscapeSegment(prop.Name)}"
+					: $"{path}/{JsonPointerHelper.EscapeSegment(prop.Name)}";
 
 				int childCount = prop.Value.ValueKind switch
 				{
@@ -564,6 +574,36 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 
 	#region Private Methods
 
+	/// <summary>
+	///     Skips a UTF-8 BOM (0xEF 0xBB 0xBF) at the current stream position if present.
+	///     For seekable streams, peeks and rewinds if no BOM found.
+	///     For non-seekable streams, wraps in a buffered approach.
+	/// </summary>
+	private static async ValueTask SkipBomAsync(Stream stream, CancellationToken cancellationToken)
+	{
+		if (!stream.CanRead)
+		{
+			return;
+		}
+
+		byte[] buffer = new byte[3];
+
+		if (stream.CanSeek)
+		{
+			long originalPosition = stream.Position;
+			int bytesRead = await stream.ReadAsync(buffer, cancellationToken).ConfigureAwait(false);
+
+			if (bytesRead >= 3 && buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF)
+			{
+				// BOM found — stream is now positioned right after it
+				return;
+			}
+
+			// No BOM — rewind to original position
+			stream.Position = originalPosition;
+		}
+	}
+
 	private static int CountObjectProperties(JsonElement element)
 	{
 		int count = 0;
@@ -587,8 +627,6 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			_ => null
 		};
 	}
-
-	private static string EscapeJsonPointer(string segment) => segment.Replace("~", "~0").Replace("/", "~1");
 
 	private static int CountNodes(JsonElement element)
 	{
@@ -711,7 +749,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 
 		foreach (string segment in segments)
 		{
-			string unescaped = UnescapeSegment(segment);
+			string unescaped = JsonPointerHelper.UnescapeSegment(segment);
 			if (current is JsonObject obj)
 			{
 				current = obj[unescaped];
@@ -734,8 +772,6 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 		int lastSlash = jsonPointer.LastIndexOf('/');
 		return lastSlash >= 0 ? jsonPointer[(lastSlash + 1)..] : jsonPointer;
 	}
-
-	private static string UnescapeSegment(string segment) => segment.Replace("~1", "/").Replace("~0", "~");
 
 	private static string GenerateUniqueKey(JsonObject obj)
 	{

@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.AspNetCore.Components;
+using Moka.Blazor.Json.Utilities;
 
 namespace Moka.Blazor.Json.Components;
 
@@ -9,7 +10,21 @@ namespace Moka.Blazor.Json.Components;
 /// </summary>
 public sealed partial class MokaJsonBreadcrumb : ComponentBase
 {
+	#region Nested Types
+
+	private sealed class BreadcrumbSegment
+	{
+		public required string Label { get; init; }
+		public required string DisplayLabel { get; init; }
+		public required string Path { get; init; }
+		public string? TypeIcon { get; init; }
+	}
+
+	#endregion
+
 	#region Private Methods
+
+	private Task HandleRootClick() => OnNavigate.InvokeAsync(string.Empty);
 
 	private static bool NeedsQuoting(string propertyName)
 	{
@@ -27,18 +42,6 @@ public sealed partial class MokaJsonBreadcrumb : ComponentBase
 		}
 
 		return false;
-	}
-
-	#endregion
-
-	#region Nested Types
-
-	private sealed class BreadcrumbSegment
-	{
-		public required string Label { get; init; }
-		public required string DisplayLabel { get; init; }
-		public required string Path { get; init; }
-		public string? TypeIcon { get; init; }
 	}
 
 	#endregion
@@ -98,7 +101,7 @@ public sealed partial class MokaJsonBreadcrumb : ComponentBase
 
 			foreach (string part in parts)
 			{
-				string unescaped = part.Replace("~1", "/").Replace("~0", "~");
+				string unescaped = JsonPointerHelper.UnescapeSegment(part);
 				sb.Append('/');
 				sb.Append(part);
 

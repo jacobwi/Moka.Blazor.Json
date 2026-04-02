@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Moka.Blazor.Json.Models;
+using Moka.Blazor.Json.Utilities;
 
 namespace Moka.Blazor.Json.Services;
 
@@ -14,6 +15,7 @@ namespace Moka.Blazor.Json.Services;
 internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 {
 	private readonly byte[] _buffer;
+	private readonly object _cacheLock = new();
 	private readonly JsonStructuralIndex _index;
 	private readonly ILogger _logger;
 	private readonly LruCache<string, JsonDocument> _subtreeCache;
@@ -87,6 +89,12 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 		ILogger logger,
 		CancellationToken cancellationToken)
 	{
+		// Strip UTF-8 BOM (0xEF 0xBB 0xBF) if present
+		if (buffer.Length >= 3 && buffer[0] == 0xEF && buffer[1] == 0xBB && buffer[2] == 0xBF)
+		{
+			buffer = buffer[3..];
+		}
+
 		var sw = Stopwatch.StartNew();
 		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(
 			buffer, 1, cancellationToken).ConfigureAwait(false);
@@ -162,8 +170,8 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 			foreach (JsonProperty prop in element.EnumerateObject())
 			{
 				string childPath = string.IsNullOrEmpty(normalizedPath)
-					? $"/{EscapeJsonPointer(prop.Name)}"
-					: $"{normalizedPath}/{EscapeJsonPointer(prop.Name)}";
+					? $"/{JsonPointerHelper.EscapeSegment(prop.Name)}"
+					: $"{normalizedPath}/{JsonPointerHelper.EscapeSegment(prop.Name)}";
 
 				int childCount;
 				if (_index.TryGetEntry(childPath, out JsonStructuralIndex.IndexEntry entry) && entry.ChildCount >= 0)
@@ -264,60 +272,64 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 		// Find the best indexed ancestor to parse
 		string parsePath = FindBestIndexedAncestor(normalizedPath);
 
-		if (!_subtreeCache.TryGet(parsePath, out JsonDocument? doc))
+		lock (_cacheLock)
 		{
-			DebugStats.RecordCacheMiss();
-
-			if (_index.TryGetEntry(parsePath, out JsonStructuralIndex.IndexEntry entry))
+			if (!_subtreeCache.TryGet(parsePath, out JsonDocument? doc))
 			{
-				long sliceLen = entry.EndOffset - entry.StartOffset;
-				ReadOnlyMemory<byte> slice = _buffer.AsMemory(
-					(int)entry.StartOffset,
-					(int)sliceLen);
+				DebugStats.RecordCacheMiss();
 
-				var sw = Stopwatch.StartNew();
-				doc = JsonDocument.Parse(slice, new JsonDocumentOptions
+				if (_index.TryGetEntry(parsePath, out JsonStructuralIndex.IndexEntry entry))
 				{
-					AllowTrailingCommas = true,
-					CommentHandling = JsonCommentHandling.Skip,
-					MaxDepth = 256
-				});
-				sw.Stop();
+					long sliceLen = entry.EndOffset - entry.StartOffset;
+					ReadOnlyMemory<byte> slice = _buffer.AsMemory(
+						(int)entry.StartOffset,
+						(int)sliceLen);
 
-				_subtreeCache.Set(parsePath, doc);
-				DebugStats.RecordParse(parsePath, entry.StartOffset, sliceLen, sw.Elapsed);
+					var sw = Stopwatch.StartNew();
+					doc = JsonDocument.Parse(slice, new JsonDocumentOptions
+					{
+						AllowTrailingCommas = true,
+						CommentHandling = JsonCommentHandling.Skip,
+						MaxDepth = 256
+					});
+					sw.Stop();
+
+					_subtreeCache.Set(parsePath, doc);
+					DebugStats.RecordParse(parsePath, entry.StartOffset, sliceLen, sw.Elapsed);
+				}
+				else
+				{
+					// Parse entire document as fallback (for root)
+					var sw = Stopwatch.StartNew();
+					doc = JsonDocument.Parse(_buffer.AsMemory(), new JsonDocumentOptions
+					{
+						AllowTrailingCommas = true,
+						CommentHandling = JsonCommentHandling.Skip,
+						MaxDepth = 256
+					});
+					sw.Stop();
+
+					_subtreeCache.Set("", doc);
+					parsePath = "";
+					DebugStats.RecordParse("(root)", 0, _buffer.Length, sw.Elapsed);
+				}
 			}
 			else
 			{
-				// Parse entire document as fallback (for root)
-				var sw = Stopwatch.StartNew();
-				doc = JsonDocument.Parse(_buffer.AsMemory(), new JsonDocumentOptions
-				{
-					AllowTrailingCommas = true,
-					CommentHandling = JsonCommentHandling.Skip,
-					MaxDepth = 256
-				});
-				sw.Stop();
-
-				_subtreeCache.Set("", doc);
-				parsePath = "";
-				DebugStats.RecordParse("(root)", 0, _buffer.Length, sw.Elapsed);
+				DebugStats.RecordCacheHit();
 			}
-		}
-		else
-		{
-			DebugStats.RecordCacheHit();
-		}
 
-		// Navigate from the parsed subtree root to the requested path
-		if (parsePath == normalizedPath || (string.IsNullOrEmpty(parsePath) && string.IsNullOrEmpty(normalizedPath)))
-		{
-			return doc.RootElement;
-		}
+			// Navigate from the parsed subtree root to the requested path
+			if (parsePath == normalizedPath ||
+			    (string.IsNullOrEmpty(parsePath) && string.IsNullOrEmpty(normalizedPath)))
+			{
+				return doc.RootElement;
+			}
 
-		// Navigate relative path from parsePath to normalizedPath
-		string relativePath = normalizedPath[parsePath.Length..];
-		return NavigateElement(doc.RootElement, relativePath);
+			// Navigate relative path from parsePath to normalizedPath
+			string relativePath = normalizedPath[parsePath.Length..];
+			return NavigateElement(doc.RootElement, relativePath);
+		}
 	}
 
 	public string GetJsonString(bool indented = true)
@@ -356,7 +368,11 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 		}
 
 		_disposed = true;
-		_subtreeCache.Clear();
+		lock (_cacheLock)
+		{
+			_subtreeCache.Clear();
+		}
+
 		return ValueTask.CompletedTask;
 	}
 
@@ -485,7 +501,7 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 
 		foreach (string segment in segments)
 		{
-			string unescaped = segment.Replace("~1", "/").Replace("~0", "~");
+			string unescaped = JsonPointerHelper.UnescapeSegment(segment);
 
 			if (current.ValueKind == JsonValueKind.Object)
 			{
@@ -553,10 +569,6 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 		int lastSlash = path.LastIndexOf('/');
 		return lastSlash >= 0 ? path[(lastSlash + 1)..] : path;
 	}
-
-	private static string UnescapeJsonPointer(string segment) => segment.Replace("~1", "/").Replace("~0", "~");
-
-	private static string EscapeJsonPointer(string segment) => segment.Replace("~", "~0").Replace("/", "~1");
 
 	#endregion
 }

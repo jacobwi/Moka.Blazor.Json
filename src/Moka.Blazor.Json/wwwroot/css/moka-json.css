@@ -229,6 +229,7 @@
     cursor: default;
     white-space: nowrap;
     min-height: calc(var(--moka-json-font-size) * var(--moka-json-line-height));
+    contain: layout style paint;
 }
 
 /* ---- Word Wrap Mode ---- */
@@ -665,6 +666,7 @@
 .moka-json-busy-spinner {
     width: 16px;
     height: 16px;
+    will-change: transform;
     border: 2px solid var(--moka-json-color-border, #e0e0e0);
     border-top-color: var(--moka-json-color-key, #0451a5);
     border-radius: 50%;
@@ -718,6 +720,7 @@
     left: 50%;
     transform: translateX(-50%);
     z-index: 60;
+    will-change: transform, opacity;
     display: flex;
     align-items: center;
     gap: 8px;

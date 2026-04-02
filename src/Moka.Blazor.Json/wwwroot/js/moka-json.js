@@ -141,19 +141,27 @@ export function addColorSchemeListener(dotNetRef) {
     };
     mq.addEventListener('change', handler);
 
-    if (!window.__mokaJsonSchemeHandler) window.__mokaJsonSchemeHandler = [];
-    window.__mokaJsonSchemeHandler.push({ mq, handler });
+    // Store for cleanup using shared incrementing counter (must fit in Int32)
+    if (!window.__mokaJsonHandlers) {
+        window.__mokaJsonHandlers = new Map();
+        window.__mokaJsonNextId = 1;
+    }
+    const id = window.__mokaJsonNextId++;
+    window.__mokaJsonHandlers.set(id, { mq, handler });
+    return id;
 }
 
 /**
- * Removes the color scheme listener.
+ * Removes a specific color scheme listener by ID.
+ * @param {number} handlerId
  */
-export function removeColorSchemeListener() {
-    if (!window.__mokaJsonSchemeHandler) return;
-    for (const { mq, handler } of window.__mokaJsonSchemeHandler) {
-        mq.removeEventListener('change', handler);
+export function removeColorSchemeListener(handlerId) {
+    if (!window.__mokaJsonHandlers) return;
+    const entry = window.__mokaJsonHandlers.get(handlerId);
+    if (entry) {
+        entry.mq.removeEventListener('change', entry.handler);
+        window.__mokaJsonHandlers.delete(handlerId);
     }
-    window.__mokaJsonSchemeHandler = [];
 }
 
 /**

@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.RegularExpressions;
 using Moka.Blazor.Json.Abstractions;
 using Moka.Blazor.Json.Models;
+using Moka.Blazor.Json.Utilities;
 
 namespace Moka.Blazor.Json.Services;
 
@@ -266,7 +267,7 @@ internal sealed class JsonSearchEngine
 			case JsonValueKind.Object:
 				foreach (JsonProperty prop in element.EnumerateObject())
 				{
-					string childPath = $"{path}/{EscapeJsonPointer(prop.Name)}";
+					string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Name)}";
 
 					if (options.SearchKeys && prop.Name.Contains(query, comparison))
 					{
@@ -338,7 +339,7 @@ internal sealed class JsonSearchEngine
 			case JsonValueKind.Object:
 				foreach (JsonProperty prop in element.EnumerateObject())
 				{
-					string childPath = $"{path}/{EscapeJsonPointer(prop.Name)}";
+					string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Name)}";
 
 					if (options.SearchKeys && regex.IsMatch(prop.Name))
 					{
@@ -388,8 +389,6 @@ internal sealed class JsonSearchEngine
 				break;
 		}
 	}
-
-	private static string EscapeJsonPointer(string segment) => segment.Replace("~", "~0").Replace("/", "~1");
 
 	private void SearchPlainText(
 		IJsonDocumentSource source,

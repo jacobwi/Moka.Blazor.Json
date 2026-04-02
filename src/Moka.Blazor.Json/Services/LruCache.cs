@@ -47,12 +47,14 @@ internal sealed class LruCache<TKey, TValue> where TKey : notnull
 			return;
 		}
 
-		// Evict if at capacity — don't dispose, just remove from cache
+		// Evict if at capacity — dispose the evicted value since no callers hold references
+		// to values they haven't already retrieved via TryGet.
 		if (_map.Count >= _capacity)
 		{
 			LinkedListNode<(TKey Key, TValue Value)>? last = _list.Last;
 			if (last is not null)
 			{
+				DisposeValue(last.Value.Value);
 				_list.RemoveLast();
 				_map.Remove(last.Value.Key);
 			}

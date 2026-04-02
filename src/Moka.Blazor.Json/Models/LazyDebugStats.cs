@@ -85,7 +85,7 @@ public sealed class LazyDebugStats
 				MaxParseTime = duration;
 			}
 
-			_parsedRegions.Add(new ParsedRegion(startOffset, startOffset + length));
+			InsertSorted(new ParsedRegion(startOffset, startOffset + length));
 			RecalculateUniqueCoverage();
 
 			if (RecentParses.Count >= 20)
@@ -106,6 +106,29 @@ public sealed class LazyDebugStats
 	/// <summary>Records a lazy index operation.</summary>
 	public void RecordLazyIndex() => Interlocked.Increment(ref _lazyIndexOps);
 
+	/// <summary>
+	///     Inserts a region in sorted order by Start offset using binary search.
+	///     Avoids re-sorting the entire list on every parse operation.
+	/// </summary>
+	private void InsertSorted(ParsedRegion region)
+	{
+		int lo = 0, hi = _parsedRegions.Count;
+		while (lo < hi)
+		{
+			int mid = (lo + hi) / 2;
+			if (_parsedRegions[mid].Start <= region.Start)
+			{
+				lo = mid + 1;
+			}
+			else
+			{
+				hi = mid;
+			}
+		}
+
+		_parsedRegions.Insert(lo, region);
+	}
+
 	private void RecalculateUniqueCoverage()
 	{
 		if (_parsedRegions.Count == 0)
@@ -114,22 +137,22 @@ public sealed class LazyDebugStats
 			return;
 		}
 
-		var sorted = _parsedRegions.OrderBy(r => r.Start).ToList();
+		// _parsedRegions is maintained in sorted order by InsertSorted
 		long uniqueBytes = 0;
-		long mergedStart = sorted[0].Start;
-		long mergedEnd = sorted[0].End;
+		long mergedStart = _parsedRegions[0].Start;
+		long mergedEnd = _parsedRegions[0].End;
 
-		for (int i = 1; i < sorted.Count; i++)
+		for (int i = 1; i < _parsedRegions.Count; i++)
 		{
-			if (sorted[i].Start <= mergedEnd)
+			if (_parsedRegions[i].Start <= mergedEnd)
 			{
-				mergedEnd = Math.Max(mergedEnd, sorted[i].End);
+				mergedEnd = Math.Max(mergedEnd, _parsedRegions[i].End);
 			}
 			else
 			{
 				uniqueBytes += mergedEnd - mergedStart;
-				mergedStart = sorted[i].Start;
-				mergedEnd = sorted[i].End;
+				mergedStart = _parsedRegions[i].Start;
+				mergedEnd = _parsedRegions[i].End;
 			}
 		}
 

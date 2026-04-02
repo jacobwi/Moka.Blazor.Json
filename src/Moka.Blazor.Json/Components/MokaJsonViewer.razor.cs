@@ -10,6 +10,7 @@ using Moka.Blazor.Json.Abstractions;
 using Moka.Blazor.Json.Interop;
 using Moka.Blazor.Json.Models;
 using Moka.Blazor.Json.Services;
+using Moka.Blazor.Json.Utilities;
 
 namespace Moka.Blazor.Json.Components;
 
@@ -817,11 +818,12 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		_searchDebounceTimer?.Dispose();
 		_searchDebounceTimer = new Timer(_ =>
 		{
-			_ = InvokeAsync(async () =>
+			if (_disposed)
 			{
-				await ExecuteSearchAsync();
-				StateHasChanged();
-			});
+				return;
+			}
+
+			_ = InvokeAsync(ExecuteSearchAsync);
 		}, null, debounceMs, Timeout.Infinite);
 	}
 
@@ -928,7 +930,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 				JsonElement element = _documentSource.GetElement(path);
 				string[] segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
 				_selectedDepth = segments.Length;
-				string? propName = segments.Length > 0 ? segments[^1].Replace("~1", "/").Replace("~0", "~") : null;
+				string? propName = segments.Length > 0 ? JsonPointerHelper.UnescapeSegment(segments[^1]) : null;
 
 				bool isContainer = element.ValueKind is JsonValueKind.Object or JsonValueKind.Array;
 				string rawText = isContainer ? "" : element.GetRawText();
@@ -966,7 +968,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		{
 			JsonElement element = _documentSource.GetElement(args.Path);
 			string[] segments = args.Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
-			string? propName = segments.Length > 0 ? segments[^1].Replace("~1", "/").Replace("~0", "~") : null;
+			string? propName = segments.Length > 0 ? JsonPointerHelper.UnescapeSegment(segments[^1]) : null;
 
 			string rawText = element.GetRawText();
 			bool isContainer = element.ValueKind is JsonValueKind.Object or JsonValueKind.Array;
@@ -1603,7 +1605,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			return;
 		}
 
-		string targetSegment = pathSegments[segmentIndex].Replace("~1", "/").Replace("~0", "~");
+		string targetSegment = JsonPointerHelper.UnescapeSegment(pathSegments[segmentIndex]);
 
 		switch (current.ValueKind)
 		{
@@ -1803,8 +1805,6 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 	private static string TruncatePreview(string raw, int maxLength = 500) =>
 		raw.Length > maxLength ? raw[..maxLength] + "..." : raw;
 
-
-	private static string EscapeJsonPointer(string segment) => segment.Replace("~", "~0").Replace("/", "~1");
 
 	private async Task RaiseError(string message, Exception? ex = null, long? bytePos = null, long? lineNumber = null)
 	{

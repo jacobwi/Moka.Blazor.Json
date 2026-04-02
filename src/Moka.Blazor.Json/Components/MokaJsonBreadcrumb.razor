@@ -1,7 +1,7 @@
 @namespace Moka.Blazor.Json.Components
 
 <div class="moka-json-breadcrumb">
-	<span class="moka-json-breadcrumb-segment" @onclick="() => OnNavigate.InvokeAsync(string.Empty)">
+	<span class="moka-json-breadcrumb-segment" @onclick="HandleRootClick">
 		<span class="moka-json-breadcrumb-type">@RootTypeIcon</span>$
 	</span>
 

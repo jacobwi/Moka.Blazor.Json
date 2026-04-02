@@ -159,4 +159,58 @@ public sealed class LazyJsonDocumentSourceTests : IAsyncLifetime
 		JsonElement element = source.GetElement("/items/50/name");
 		Assert.Equal("Item 50", element.GetString());
 	}
+
+	[Fact]
+	public async Task ConcurrentGetElement_DoesNotThrow()
+	{
+		// Build JSON with many distinct paths to stress the cache
+		var sb = new StringBuilder();
+		sb.Append('{');
+		for (int i = 0; i < 50; i++)
+		{
+			if (i > 0)
+			{
+				sb.Append(',');
+			}
+
+			sb.Append(CultureInfo.InvariantCulture, $"\"key{i}\":{{\"value\":{i}}}");
+		}
+
+		sb.Append('}');
+
+		await using LazyJsonDocumentSource source = await LazyJsonDocumentSource.CreateFromStringAsync(
+			sb.ToString(),
+			NullLogger<LazyJsonDocumentSource>.Instance,
+			new MokaJsonViewerOptions());
+
+		// Concurrent access to different paths exercises the cache lock
+		var tasks = new Task[20];
+		for (int i = 0; i < tasks.Length; i++)
+		{
+			int idx = i % 50;
+			tasks[i] = Task.Run(() =>
+			{
+				JsonElement element = source.GetElement($"/key{idx}/value");
+				Assert.Equal(JsonValueKind.Number, element.ValueKind);
+				Assert.Equal(idx, element.GetInt32());
+			});
+		}
+
+		await Task.WhenAll(tasks);
+	}
+
+	[Fact]
+	public async Task CreateFromString_UnicodeContent_Works()
+	{
+		const string json = """{"名前":"太郎","emoji":"🚀","city":"東京"}""";
+
+		await using LazyJsonDocumentSource source = await LazyJsonDocumentSource.CreateFromStringAsync(
+			json,
+			NullLogger<LazyJsonDocumentSource>.Instance,
+			new MokaJsonViewerOptions());
+
+		Assert.True(source.IsLoaded);
+		Assert.Equal("太郎", source.GetRawValue("/名前"));
+		Assert.Equal("🚀", source.GetRawValue("/emoji"));
+	}
 }

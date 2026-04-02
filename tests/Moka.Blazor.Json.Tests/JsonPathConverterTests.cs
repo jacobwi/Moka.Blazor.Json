@@ -53,4 +53,16 @@ public sealed class JsonPathConverterTests
 	[Fact]
 	public void ToDotNotation_ComplexPath_ReturnsCorrectNotation() => Assert.Equal("$.users[0].address.city",
 		JsonPathConverter.ToDotNotation("/users/0/address/city"));
+
+	[Fact]
+	public void ToDotNotation_UnicodeProperty_ReturnsDotNotation() =>
+		Assert.Equal("$.名前", JsonPathConverter.ToDotNotation("/名前"));
+
+	[Fact]
+	public void ToDotNotation_PropertyWithSlashEscape_UsesQuotedNotation() =>
+		Assert.Equal("$[\"a/b/c\"]", JsonPathConverter.ToDotNotation("/a~1b~1c"));
+
+	[Fact]
+	public void ToDotNotation_PropertyWithTildeAndSlash_HandlesCorrectly() =>
+		Assert.Equal("$[\"a~/b\"]", JsonPathConverter.ToDotNotation("/a~0~1b"));
 }

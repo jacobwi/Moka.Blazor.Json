@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -86,5 +87,41 @@ public sealed class JsonDocumentManagerTests : IAsyncDisposable
 		string output = _manager.GetJsonString(false);
 		Assert.Contains("\"name\"", output);
 		Assert.Contains("\"test\"", output);
+	}
+
+	[Fact]
+	public async Task ParseAsync_String_With_BOM_Parses_Successfully()
+	{
+		// UTF-8 BOM character U+FEFF prepended to JSON
+		string json = "\uFEFF" + """{"name":"test"}""";
+		await _manager.ParseAsync(json);
+
+		Assert.True(_manager.IsLoaded);
+		Assert.Equal("test", _manager.RootElement.GetProperty("name").GetString());
+	}
+
+	[Fact]
+	public async Task ParseAsync_Stream_With_BOM_Parses_Successfully()
+	{
+		byte[] bom = [0xEF, 0xBB, 0xBF];
+		byte[] jsonBytes = Encoding.UTF8.GetBytes("""{"name":"test"}""");
+		byte[] combined = [.. bom, .. jsonBytes];
+
+		using var stream = new MemoryStream(combined);
+		await _manager.ParseAsync(stream);
+
+		Assert.True(_manager.IsLoaded);
+		Assert.Equal("test", _manager.RootElement.GetProperty("name").GetString());
+	}
+
+	[Fact]
+	public async Task ParseAsync_Stream_Without_BOM_Parses_Successfully()
+	{
+		byte[] jsonBytes = Encoding.UTF8.GetBytes("""{"count":42}""");
+		using var stream = new MemoryStream(jsonBytes);
+		await _manager.ParseAsync(stream);
+
+		Assert.True(_manager.IsLoaded);
+		Assert.Equal(42, _manager.RootElement.GetProperty("count").GetInt32());
 	}
 }

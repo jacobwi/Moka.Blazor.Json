@@ -2,6 +2,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Moka.Blazor.Json.Abstractions;
+using Moka.Blazor.Json.Utilities;
 
 namespace Moka.Blazor.Json.Services;
 
@@ -212,7 +213,7 @@ internal static class StreamingJsonSearcher
 
 		if (parentKind == JsonValueKind.Object && propertyName is not null)
 		{
-			return $"{parentPath}/{EscapeJsonPointer(propertyName)}";
+			return $"{parentPath}/{JsonPointerHelper.EscapeSegment(propertyName)}";
 		}
 
 		if (parentKind == JsonValueKind.Array)
@@ -236,8 +237,6 @@ internal static class StreamingJsonSearcher
 			}
 		}
 	}
-
-	private static string EscapeJsonPointer(string segment) => segment.Replace("~", "~0").Replace("/", "~1");
 
 	/// <summary>
 	///     Progress data reported during a streaming search.

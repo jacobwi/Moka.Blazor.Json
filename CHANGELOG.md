@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.5.0] - 2026-04-02
+
+### 🐛 Fixed
+- **Memory leak**: LruCache now disposes evicted `IDisposable` values (e.g., `JsonDocument` holding native memory)
+- **Thread safety**: LazyJsonDocumentSource subtree cache access now synchronized with lock
+- **JS listener leak**: Color scheme listener uses ID-based Map pattern instead of global array (fixes multi-instance cleanup)
+- **Search debounce race**: Timer callback guarded against firing after component disposal
+- **Double render**: Removed redundant `StateHasChanged()` call after search execution
+
+### ⚡ Performance
+- CSS `contain: layout style paint` on `.moka-json-node` — prevents layout thrashing across 1000s of virtualized nodes
+- `will-change` hints on spinner and toast animations
+- Zero-allocation CSS class computation via precomputed `string[16]` lookup table indexed by boolean flags
+- `LazyDebugStats` uses binary search insert instead of `OrderBy().ToList()` on every parse
+- Breadcrumb root click uses named method instead of lambda allocation
+
+### 🔧 Changed
+- **Breaking**: Removed dead DI registrations for `JsonDocumentManager`, `JsonTreeFlattener`, `JsonSearchEngine` — these were never injected (MokaJsonViewer creates them internally via `new`)
+- Centralized JSON Pointer escape/unescape into `JsonPointerHelper` utility (deduplicated from 7+ files)
+
+### 🧪 Tests
+- Replaced `Thread.Sleep` with `WaitForAssertion` in component tests
+- Added concurrency test for LazyJsonDocumentSource cache access
+- Added unicode/emoji tests for search engine, path converter, and lazy source
+- Added `JsonPointerHelper` round-trip tests
+- Added LruCache eviction disposal and clear disposal tests
+- **208 tests** (up from 184)
+
 ## [0.4.4] - 2026-04-02
 
 ### 🐛 Fixed

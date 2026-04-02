@@ -1,3 +1,5 @@
+using Moka.Blazor.Json.Utilities;
+
 namespace Moka.Blazor.Json.Services;
 
 /// <summary>
@@ -39,7 +41,7 @@ internal static class JsonPathConverter
 		foreach (string segment in segments)
 		{
 			// Unescape JSON Pointer encoding
-			string unescaped = segment.Replace("~1", "/").Replace("~0", "~");
+			string unescaped = JsonPointerHelper.UnescapeSegment(segment);
 
 			if (int.TryParse(unescaped, out int index))
 				// Array index

@@ -81,19 +81,22 @@ public sealed class LruCacheTests
 
 	[Fact]
 	[SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope",
-		Justification = "Testing that cache does NOT dispose evicted values")]
-	public void Eviction_Does_Not_Dispose_Values()
+		Justification = "Testing that cache disposes evicted values")]
+	public void Eviction_Disposes_Evicted_Values()
 	{
-		using var cache = new DisposableCacheWrapper<string, DisposableValue>(1);
+		var cache = new LruCache<string, DisposableValue>(2);
 		var v1 = new DisposableValue();
-		cache.Inner.Set("a", v1);
-
 		var v2 = new DisposableValue();
-		cache.Inner.Set("b", v2); // evicts v1 but does NOT dispose it
+		var v3 = new DisposableValue();
+		cache.Set("a", v1);
+		cache.Set("b", v2);
+		cache.Set("c", v3); // evicts v1
 
-		// Evicted values are not disposed — concurrent readers may still hold references.
-		Assert.False(v1.IsDisposed);
+		// Evicted value should be disposed
+		Assert.True(v1.IsDisposed);
+		// Remaining values should not be disposed
 		Assert.False(v2.IsDisposed);
+		Assert.False(v3.IsDisposed);
 	}
 
 	[Fact]
@@ -117,11 +120,5 @@ public sealed class LruCacheTests
 	{
 		public bool IsDisposed { get; private set; }
 		public void Dispose() => IsDisposed = true;
-	}
-
-	private sealed class DisposableCacheWrapper<TKey, TValue>(int capacity) : IDisposable where TKey : notnull
-	{
-		public LruCache<TKey, TValue> Inner { get; } = new(capacity);
-		public void Dispose() => Inner.Clear();
 	}
 }

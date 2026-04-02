@@ -503,9 +503,8 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 		IElement valueNode = nodes.First(n => n.TextContent.Contains("Alice"));
 		valueNode.DoubleClick();
 
-		// Small delay to ensure no async side effects
-		Thread.Sleep(50);
-		Assert.Empty(cut.FindAll(".moka-json-inline-edit"));
+		// Verify no inline edit appears (read-only mode)
+		cut.WaitForAssertion(() => Assert.Empty(cut.FindAll(".moka-json-inline-edit")), TimeSpan.FromSeconds(1));
 	}
 
 	[Fact]
@@ -794,6 +793,22 @@ public sealed class MokaJsonViewerComponentTests : IAsyncLifetime
 
 		IReadOnlyList<IElement> values = cut.FindAll(".moka-json-value--number");
 		Assert.Contains(values, v => v.TextContent.Contains("42"));
+	}
+
+	[Fact]
+	public void Json_With_BOM_Renders_Successfully()
+	{
+		// UTF-8 BOM character U+FEFF prepended to JSON
+		string json = "\uFEFF" + """{"name":"Alice"}""";
+
+		IRenderedComponent<MokaJsonViewer> cut = RenderViewer(p => p
+			.Add(v => v.Json, json)
+			.Add(v => v.MaxDepthExpanded, 2));
+
+		// Should render without error
+		Assert.Empty(cut.FindAll(".moka-json-error"));
+		IReadOnlyList<IElement> values = cut.FindAll(".moka-json-value--string");
+		Assert.Contains(values, v => v.TextContent.Contains("Alice"));
 	}
 
 	#endregion
