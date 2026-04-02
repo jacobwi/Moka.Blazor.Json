@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.3] - 2026-04-02
+
+### 🐛 Fixed
+- UI thread blocking — all parsing, flattening, stats, search, expand/collapse now always run on background thread via `Task.Run`
+- CSS flash of unstyled content — viewer hidden with `visibility:hidden` until first render completes
+- Race conditions when loading new documents while background operations are in-flight (`ObjectDisposedException` guards)
+- bUnit tests updated with `WaitForState` for all async interactions (edit, context menu, re-render, expand/collapse)
+
 ## [0.4.2] - 2026-03-31
 
 ### ✨ New
