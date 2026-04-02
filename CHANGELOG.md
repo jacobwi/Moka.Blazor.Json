@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.1] - 2026-04-02
+
+### 🐛 Fixed
+- **Duplicate key error**: Expanding nodes could throw `InvalidOperationException` (duplicate `@key`) when concurrent flatten operations reset the shared ID counter — now uses local counter per flatten call
+- **Loading spinner hidden**: First load appeared to block because `visibility:hidden` CSS flash guard hid the spinner until `OnAfterRender` — spinner now shows immediately
+
 ## [0.5.0] - 2026-04-02
 
 ### 🐛 Fixed
