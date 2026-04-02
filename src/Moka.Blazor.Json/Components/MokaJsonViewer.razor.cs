@@ -302,7 +302,7 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 
 	private string HeightStyle => $"height: {Height}";
 
-	private string ComputedStyle => _cssReady ? HeightStyle : $"visibility:hidden;{HeightStyle}";
+	private string ComputedStyle => _cssReady || _isLoading ? HeightStyle : $"visibility:hidden;{HeightStyle}";
 
 	private MokaJsonToolbarMode EffectiveToolbarMode =>
 		ToolbarMode ?? OptionsAccessor.Value.DefaultToolbarMode;
@@ -370,15 +370,15 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 		_treeFlattener.ClearSearchMatches();
 		_scopedPath = null;
 
-		// Yield so Blazor renders the loading spinner before parsing begins.
-		// ParseAsync(string) completes synchronously, so without this yield
-		// the component would block through the entire parse without ever
-		// showing the loading state.
+		// Yield FIRST so Blazor renders the loading spinner before any work begins.
+		// Without this yield the component blocks through disposal + parse without
+		// ever showing the loading state.
 		StateHasChanged();
 		await Task.Yield();
 
 		try
 		{
+			// Dispose previous source/manager (may be slow for large lazy caches)
 			if (_documentSource is not null)
 			{
 				await _documentSource.DisposeAsync();

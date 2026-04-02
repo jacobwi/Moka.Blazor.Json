@@ -24,7 +24,6 @@ internal sealed class JsonTreeFlattener
 	private readonly HashSet<string> _expandedPaths = [];
 	private readonly HashSet<string> _searchMatchPaths = [];
 	private string? _activeSearchMatchPath;
-	private int _nextId;
 
 	#endregion
 
@@ -139,9 +138,9 @@ internal sealed class JsonTreeFlattener
 	/// <returns>A list of flattened nodes representing the visible tree.</returns>
 	public List<FlattenedJsonNode> Flatten(JsonElement root)
 	{
-		_nextId = 0;
+		int nextId = 0;
 		var result = new List<FlattenedJsonNode>();
-		FlattenElement(root, "", null, 0, false, result);
+		FlattenElement(ref nextId, root, "", null, 0, false, result);
 		return result;
 	}
 
@@ -154,9 +153,9 @@ internal sealed class JsonTreeFlattener
 	/// <returns>A list of flattened nodes representing the visible subtree.</returns>
 	public List<FlattenedJsonNode> FlattenScoped(JsonElement scopedRoot, string scopedPath)
 	{
-		_nextId = 0;
+		int nextId = 0;
 		var result = new List<FlattenedJsonNode>();
-		FlattenElement(scopedRoot, scopedPath, null, 0, false, result);
+		FlattenElement(ref nextId, scopedRoot, scopedPath, null, 0, false, result);
 		return result;
 	}
 
@@ -166,9 +165,9 @@ internal sealed class JsonTreeFlattener
 	/// </summary>
 	public List<FlattenedJsonNode> Flatten(IJsonDocumentSource source)
 	{
-		_nextId = 0;
+		int nextId = 0;
 		var result = new List<FlattenedJsonNode>();
-		FlattenFromSource(source, "", null, null, source.RootValueKind, null,
+		FlattenFromSource(ref nextId, source, "", null, null, source.RootValueKind, null,
 			source.GetChildCount(""), 0, false, result);
 		return result;
 	}
@@ -178,11 +177,11 @@ internal sealed class JsonTreeFlattener
 	/// </summary>
 	public List<FlattenedJsonNode> FlattenScoped(IJsonDocumentSource source, string scopedPath)
 	{
-		_nextId = 0;
+		int nextId = 0;
 		var result = new List<FlattenedJsonNode>();
 		JsonValueKind kind = source.GetValueKind(scopedPath);
 		int childCount = source.GetChildCount(scopedPath);
-		FlattenFromSource(source, scopedPath, null, null, kind, null, childCount, 0, false, result);
+		FlattenFromSource(ref nextId, source, scopedPath, null, null, kind, null, childCount, 0, false, result);
 		return result;
 	}
 
@@ -191,6 +190,7 @@ internal sealed class JsonTreeFlattener
 	#region Private Methods
 
 	private void FlattenElement(
+		ref int nextId,
 		JsonElement element,
 		string path,
 		string? propertyName,
@@ -198,7 +198,7 @@ internal sealed class JsonTreeFlattener
 		bool hasTrailingComma,
 		List<FlattenedJsonNode> result)
 	{
-		int id = _nextId++;
+		int id = nextId++;
 		bool isContainer = element.ValueKind is JsonValueKind.Object or JsonValueKind.Array;
 		bool isExpanded = isContainer && _expandedPaths.Contains(path);
 		int childCount = GetChildCount(element);
@@ -234,7 +234,7 @@ internal sealed class JsonTreeFlattener
 			{
 				string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Name)}";
 				bool isLast = i == childCount - 1;
-				FlattenElement(prop.Value, childPath, prop.Name, depth + 1, !isLast, result);
+				FlattenElement(ref nextId, prop.Value, childPath, prop.Name, depth + 1, !isLast, result);
 				i++;
 			}
 		}
@@ -245,7 +245,7 @@ internal sealed class JsonTreeFlattener
 			{
 				string childPath = $"{path}/{i}";
 				bool isLast = i == childCount - 1;
-				FlattenElement(item, childPath, null, depth + 1, !isLast, result);
+				FlattenElement(ref nextId, item, childPath, null, depth + 1, !isLast, result);
 
 				// Patch the array index on the last added node
 				int lastIdx = result.Count - 1;
@@ -258,7 +258,7 @@ internal sealed class JsonTreeFlattener
 		// Add closing bracket
 		result.Add(new FlattenedJsonNode
 		{
-			Id = _nextId++,
+			Id = nextId++,
 			Path = path,
 			Depth = depth,
 			PropertyName = null,
@@ -363,6 +363,7 @@ internal sealed class JsonTreeFlattener
 	}
 
 	private void FlattenFromSource(
+		ref int nextId,
 		IJsonDocumentSource source,
 		string path,
 		string? propertyName,
@@ -374,7 +375,7 @@ internal sealed class JsonTreeFlattener
 		bool hasTrailingComma,
 		List<FlattenedJsonNode> result)
 	{
-		int id = _nextId++;
+		int id = nextId++;
 		bool isContainer = valueKind is JsonValueKind.Object or JsonValueKind.Array;
 		bool isExpanded = isContainer && _expandedPaths.Contains(path);
 
@@ -406,7 +407,7 @@ internal sealed class JsonTreeFlattener
 		foreach (JsonChildDescriptor child in source.EnumerateChildren(path))
 		{
 			bool isLast = i == childCount - 1;
-			FlattenFromSource(source, child.Path, child.PropertyName, child.ArrayIndex,
+			FlattenFromSource(ref nextId, source, child.Path, child.PropertyName, child.ArrayIndex,
 				child.ValueKind, child.RawValue, child.ChildCount, depth + 1, !isLast, result);
 			i++;
 		}
@@ -414,7 +415,7 @@ internal sealed class JsonTreeFlattener
 		// Add closing bracket
 		result.Add(new FlattenedJsonNode
 		{
-			Id = _nextId++,
+			Id = nextId++,
 			Path = path,
 			Depth = depth,
 			PropertyName = null,
