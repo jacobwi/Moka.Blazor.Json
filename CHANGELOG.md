@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.4] - 2026-04-02
+
+### 🐛 Fixed
+- "No document is loaded" error caused by race condition when concurrent loads dispose previous document source
+- Stream position not reset before parsing — reused/shared `MemoryStream` instances now handled correctly
+- Unobserved exception in background stats task when document source is disposed during computation
+
 ## [0.4.3] - 2026-04-02
 
 ### 🐛 Fixed

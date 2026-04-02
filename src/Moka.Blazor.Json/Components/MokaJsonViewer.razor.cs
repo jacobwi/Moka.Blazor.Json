@@ -432,6 +432,12 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			}
 			else if (JsonStream is not null)
 			{
+				// Ensure the stream is at the beginning — callers may pass a reused stream
+				if (JsonStream.CanSeek && JsonStream.Position != 0)
+				{
+					JsonStream.Position = 0;
+				}
+
 				// Check size if seekable
 				if (JsonStream.CanSeek && JsonStream.Length > OptionsAccessor.Value.MaxDocumentSizeBytes)
 				{
@@ -505,29 +511,38 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			CancellationTokenSource cts = _statsCts = new CancellationTokenSource();
 			_ = Task.Run(() =>
 			{
-				if (cts.Token.IsCancellationRequested)
-				{
-					return;
-				}
-
-				int nc = source.CountNodes();
-				int md = source.GetMaxDepth();
-				if (cts.Token.IsCancellationRequested)
-				{
-					return;
-				}
-
-				_ = InvokeAsync(() =>
+				try
 				{
 					if (cts.Token.IsCancellationRequested)
 					{
 						return;
 					}
 
-					_nodeCount = nc;
-					_maxDepth = md;
-					StateHasChanged();
-				});
+					int nc = source.CountNodes();
+					int md = source.GetMaxDepth();
+					if (cts.Token.IsCancellationRequested)
+					{
+						return;
+					}
+
+					_ = InvokeAsync(() =>
+					{
+						if (cts.Token.IsCancellationRequested)
+						{
+							return;
+						}
+
+						_nodeCount = nc;
+						_maxDepth = md;
+						StateHasChanged();
+					});
+				}
+				catch (Exception ex) when (
+					ex is ObjectDisposedException or InvalidOperationException or OperationCanceledException
+					&& (cts.Token.IsCancellationRequested || _disposed))
+				{
+					// Source was disposed or operation was cancelled — ignore
+				}
 			}, cts.Token);
 
 			_isValid = true;
@@ -545,6 +560,13 @@ public sealed partial class MokaJsonViewer : ComponentBase, IMokaJsonViewer, IAs
 			_errorMessage = ex.Message;
 			_isLoading = false;
 			await RaiseError(ex.Message, ex, ex.BytePositionInLine, ex.LineNumber);
+		}
+		catch (ObjectDisposedException)
+		{
+			// A concurrent LoadJsonAsync disposed the previous document source
+			// while a background task was still using it — safe to ignore since
+			// the newer load will take over.
+			_isLoading = false;
 		}
 		catch (Exception ex) when (ex is not OperationCanceledException)
 		{
