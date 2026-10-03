@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.2] - 2026-10-03
+
+### 📦 Dependencies
+| Package | From | To |
+|---|---|---|
+| Moka.Blazor.AI (Moka.Blazor.Json.AI) | 0.1.0 | 0.2.0 |
+
+Moka.Blazor.AI 0.2.0 brings Microsoft.Extensions.AI 10.10.1, OllamaSharp 5.5.0 and Markdig 1.4.0.
+
+### 🧪 Tests
+- xunit.v3 3.2.2 to 4.0.1, bUnit 2.6.2 to 2.11.3, Microsoft.NET.Test.Sdk 18.3.0 to 18.10.1
+- `dotnet test` now runs on Microsoft.Testing.Platform via `global.json`. xunit.v3 4.x needs it on the .NET 10 SDK
+
 ## [0.5.1] - 2026-04-02
 
 ### 🐛 Fixed
