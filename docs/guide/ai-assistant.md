@@ -90,6 +90,29 @@ Bring your own `Microsoft.Extensions.AI.IChatClient`:
 builder.Services.AddMokaJsonAi(myCustomChatClient);
 ```
 
+## Tool Calling & MCP Servers
+
+Since Moka.AI 0.5.0 the assistant can call tools — plain .NET functions or everything exposed by a [Model Context Protocol](https://modelcontextprotocol.io) server. Register MCP servers next to the JSON AI services:
+
+```bash
+dotnet add package Moka.AI.Mcp
+```
+
+```csharp
+using Moka.AI.Mcp;
+using Moka.AI.Mcp.Extensions;
+
+builder.Services.AddMokaJsonAi(options => { /* provider config */ });
+builder.Services.AddMokaAiMcp(mcp => mcp
+    .AddStdioServer("filesystem", "npx", "-y", "@modelcontextprotocol/server-filesystem", @"C:\data")
+    .AddHttpServer("github", new Uri("http://localhost:7801/mcp")));
+
+// after building the app, before the first chat request:
+await app.Services.GetRequiredService<MokaAiMcpClient>().ConnectAsync();
+```
+
+Connected servers' tools are discovered and registered automatically — the assistant can call them while answering questions about your JSON (e.g. fetching a schema from a remote API, reading referenced files). Plain .NET functions work too, via `AiChatOptions.Tools` and `AIFunctionFactory.Create`. The model must support tool calling (Qwen 2.5, Llama 3.x, Phi-3.5+, GPT-4x, Claude).
+
 ## Quick Actions
 
 The panel includes configurable quick action buttons:

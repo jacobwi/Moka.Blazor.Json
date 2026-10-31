@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.1] - 2026-10-31
+
+### 📦 Dependencies
+| Package | From | To |
+|---|---|---|
+| Moka.AI (Moka.Blazor.Json.AI) | 0.3.0 | 0.5.0 |
+| Moka.Blazor.AI (Moka.Blazor.Json.AI) | 0.3.0 | 0.5.0 |
+
+### ✨ New (from the Moka.AI 0.5.0 upgrade)
+- **Tool calling & MCP support** — the AI assistant can now call tools: register .NET functions via `AiChatOptions.Tools`, or connect MCP servers with the separate `Moka.AI.Mcp` package (`AddMokaAiMcp` + `MokaAiMcpClient.ConnectAsync`). Tool calls execute automatically during chat; see the AI Assistant guide
+- Picks up conversation history trimming (`MaxHistoryChars`) from Moka.AI 0.4.0
+
 ## [0.6.0] - 2026-10-30
 
 ### 💥 Breaking Changes
