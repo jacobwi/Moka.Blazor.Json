@@ -1,14 +1,14 @@
 using System.Text;
 using System.Text.Json;
-using Moka.Blazor.AI.Models;
-using Moka.Blazor.AI.Services;
+using Moka.AI.Models;
+using Moka.AI.Services;
 using Moka.Blazor.Json.Components;
 
 namespace Moka.Blazor.Json.AI.Services;
 
 /// <summary>
 ///     Extracts relevant JSON context for AI prompts, truncating large documents.
-///     Implements <see cref="IAiContextBuilder" /> from the base Moka.Blazor.AI library.
+///     Implements <see cref="IAiContextBuilder" /> from the Moka.AI library.
 /// </summary>
 internal sealed class JsonContextBuilder : IAiContextBuilder
 {

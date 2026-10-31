@@ -1,9 +1,9 @@
 using Microsoft.Extensions.AI;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
-using Moka.Blazor.AI.Extensions;
-using Moka.Blazor.AI.Models;
-using Moka.Blazor.AI.Services;
+using Moka.AI.Extensions;
+using Moka.AI.Models;
+using Moka.AI.Services;
 using Moka.Blazor.Json.AI.Services;
 
 #pragma warning disable CA1062 // Validate arguments of public methods

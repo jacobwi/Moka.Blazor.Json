@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.6.0] - 2026-10-30
+
+### 💥 Breaking Changes
+- Upgraded to Moka.Blazor.AI 0.3.0 / Moka.AI 0.3.0. The AI engine now lives in the
+  UI-free **Moka.AI** package — `AiChatService`, `IAiContextBuilder`, `AiChatOptions`,
+  and `AddMokaAi()` moved from `Moka.Blazor.AI.*` namespaces to `Moka.AI.*`
+  (components remain in `Moka.Blazor.AI.Components`). Consumers must update `using`
+  directives for service/model types
+
+### 📦 Dependencies
+| Package | From | To |
+|---|---|---|
+| Moka.Blazor.AI (Moka.Blazor.Json.AI) | 0.2.0 | 0.3.0 |
+| Moka.AI (Moka.Blazor.Json.AI) | — | 0.3.0 (new direct reference) |
+
+### ✨ New (from the Moka.AI 0.3.0 upgrade)
+- `AiChatOptions.ApiKey` — authenticate against providers that require it
+- Runtime settings (model, temperature, …) are isolated per scope/circuit instead of
+  leaking across users, and `SetModel()` now takes effect on the next request
+
 ## [0.5.2] - 2026-10-03
 
 ### 📦 Dependencies

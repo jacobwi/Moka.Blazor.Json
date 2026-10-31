@@ -1,6 +1,6 @@
 using System.Runtime.CompilerServices;
-using Moka.Blazor.AI.Models;
-using Moka.Blazor.AI.Services;
+using Moka.AI.Models;
+using Moka.AI.Services;
 using Moka.Blazor.Json.AI.Models;
 using Moka.Blazor.Json.Components;
 

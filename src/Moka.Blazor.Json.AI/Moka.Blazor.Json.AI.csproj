@@ -18,6 +18,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
+		<PackageReference Include="Moka.AI" />
 		<PackageReference Include="Moka.Blazor.AI" />
 	</ItemGroup>
 

@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Components;
+using Moka.AI.Models;
 using Moka.Blazor.AI.Components;
-using Moka.Blazor.AI.Models;
 using Moka.Blazor.Json.AI.Services;
 using Moka.Blazor.Json.Components;
 using Moka.Blazor.Json.Models;
