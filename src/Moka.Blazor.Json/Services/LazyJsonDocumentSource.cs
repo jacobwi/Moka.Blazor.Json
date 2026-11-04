@@ -102,10 +102,10 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 
 		var sw = Stopwatch.StartNew();
 		byte[] json = buffer;
-		Task<bool> duplicateScan = Task.Run(() => JsonObjectReader.MayContainDuplicateKeys(json), cancellationToken);
+		bool mayHaveDuplicateKeys = await Task.Run(
+			() => JsonObjectReader.MayContainDuplicateKeys(json), cancellationToken).ConfigureAwait(false);
 		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(
-			buffer, 1, cancellationToken).ConfigureAwait(false);
-		bool mayHaveDuplicateKeys = await duplicateScan.ConfigureAwait(false);
+			buffer, 1, mayHaveDuplicateKeys, cancellationToken).ConfigureAwait(false);
 		sw.Stop();
 
 		logger.LogDebug("Built lazy JSON index: {Size} bytes, {Entries} entries, {Time}ms",
@@ -128,28 +128,18 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 
 		string normalizedPath = NormalizePath(path);
 
-		if (_index.TryGetEntry(normalizedPath, out JsonStructuralIndex.IndexEntry entry))
+		// The index counts every key, so with a repeated key it would count one twice.
+		if (!_mayHaveDuplicateKeys && _index.TryGetEntry(normalizedPath, out JsonStructuralIndex.IndexEntry entry))
 		{
 			if (entry.ChildCount >= 0)
 			{
 				return entry.ChildCount;
 			}
 
-			// Child count unknown — need to index children lazily
 			DebugStats.RecordLazyIndex();
-			_index.IndexChildrenAsync(normalizedPath, _buffer, CancellationToken.None).GetAwaiter().GetResult();
-
-			// Re-read the entry — it may have been updated, or count children from index
-			int count = 0;
-			foreach (JsonStructuralIndex.IndexEntry _ in _index.GetDirectChildren(normalizedPath))
-			{
-				count++;
-			}
-
-			return count;
+			return _index.IndexChildren(normalizedPath, _buffer, mayHaveDuplicateKeys: false);
 		}
 
-		// Not in index — parse the container to count
 		return GetElementChildCount(GetElement(path));
 	}
 
@@ -175,7 +165,8 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 				JsonElement value = prop.Value;
 
 				int childCount;
-				if (_index.TryGetEntry(childPath, out JsonStructuralIndex.IndexEntry entry) && entry.ChildCount >= 0)
+				if (!_mayHaveDuplicateKeys && _index.TryGetEntry(childPath, out JsonStructuralIndex.IndexEntry entry) &&
+				    entry.ChildCount >= 0)
 				{
 					childCount = entry.ChildCount;
 				}
@@ -203,7 +194,8 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 				string childPath = $"{normalizedPath}/{i}";
 
 				int childCount;
-				if (_index.TryGetEntry(childPath, out JsonStructuralIndex.IndexEntry entry) && entry.ChildCount >= 0)
+				if (!_mayHaveDuplicateKeys && _index.TryGetEntry(childPath, out JsonStructuralIndex.IndexEntry entry) &&
+				    entry.ChildCount >= 0)
 				{
 					childCount = entry.ChildCount;
 				}
@@ -232,14 +224,6 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 	{
 		ObjectDisposedException.ThrowIf(_disposed, this);
 
-		string normalizedPath = NormalizePath(path);
-
-		if (_index.TryGetEntry(normalizedPath, out JsonStructuralIndex.IndexEntry entry) &&
-		    entry.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
-		{
-			return GetRawValueFromBytes(entry);
-		}
-
 		JsonElement element = GetElement(path);
 		return element.ValueKind is JsonValueKind.Object or JsonValueKind.Array
 			? null
@@ -267,68 +251,62 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 		ObjectDisposedException.ThrowIf(_disposed, this);
 
 		string normalizedPath = NormalizePath(path);
-
-		// Find the best indexed ancestor to parse
 		string parsePath = FindBestIndexedAncestor(normalizedPath);
+		JsonDocument doc = GetOrParseSubtree(parsePath);
+
+		return parsePath == normalizedPath
+			? doc.RootElement
+			: NavigateElement(doc.RootElement, normalizedPath[parsePath.Length..]);
+	}
+
+	// Parsing happens outside the cache lock so a cached lookup (often on the UI thread) never waits for
+	// another thread's parse. Two threads may parse the same subtree at once; the first one cached wins.
+	private JsonDocument GetOrParseSubtree(string parsePath)
+	{
+		lock (_cacheLock)
+		{
+			if (_subtreeCache.TryGet(parsePath, out JsonDocument? cached))
+			{
+				DebugStats.RecordCacheHit();
+				return cached;
+			}
+		}
+
+		DebugStats.RecordCacheMiss();
+
+		// Only the root can be missing from the index (a document whose root is a primitive).
+		long start = 0;
+		long length = _buffer.Length;
+		if (_index.TryGetEntry(parsePath, out JsonStructuralIndex.IndexEntry entry))
+		{
+			start = entry.StartOffset;
+			length = entry.EndOffset - entry.StartOffset;
+		}
+
+		var sw = Stopwatch.StartNew();
+		JsonDocument parsed = JsonDocument.Parse(_buffer.AsMemory((int)start, (int)length),
+			JsonFormatting.LenientDocument);
+		sw.Stop();
 
 		lock (_cacheLock)
 		{
-			if (!_subtreeCache.TryGet(parsePath, out JsonDocument? doc))
+			if (_disposed)
 			{
-				DebugStats.RecordCacheMiss();
-
-				if (_index.TryGetEntry(parsePath, out JsonStructuralIndex.IndexEntry entry))
-				{
-					long sliceLen = entry.EndOffset - entry.StartOffset;
-					ReadOnlyMemory<byte> slice = _buffer.AsMemory(
-						(int)entry.StartOffset,
-						(int)sliceLen);
-
-					var sw = Stopwatch.StartNew();
-					doc = JsonDocument.Parse(slice, new JsonDocumentOptions
-					{
-						AllowTrailingCommas = true,
-						CommentHandling = JsonCommentHandling.Skip,
-						MaxDepth = 256
-					});
-					sw.Stop();
-
-					_subtreeCache.Set(parsePath, doc);
-					DebugStats.RecordParse(parsePath, entry.StartOffset, sliceLen, sw.Elapsed);
-				}
-				else
-				{
-					// Parse entire document as fallback (for root)
-					var sw = Stopwatch.StartNew();
-					doc = JsonDocument.Parse(_buffer.AsMemory(), new JsonDocumentOptions
-					{
-						AllowTrailingCommas = true,
-						CommentHandling = JsonCommentHandling.Skip,
-						MaxDepth = 256
-					});
-					sw.Stop();
-
-					_subtreeCache.Set("", doc);
-					parsePath = "";
-					DebugStats.RecordParse("(root)", 0, _buffer.Length, sw.Elapsed);
-				}
-			}
-			else
-			{
-				DebugStats.RecordCacheHit();
+				parsed.Dispose();
+				throw new ObjectDisposedException(nameof(LazyJsonDocumentSource));
 			}
 
-			// Navigate from the parsed subtree root to the requested path
-			if (parsePath == normalizedPath ||
-			    (string.IsNullOrEmpty(parsePath) && string.IsNullOrEmpty(normalizedPath)))
+			if (_subtreeCache.TryGet(parsePath, out JsonDocument? raced))
 			{
-				return doc.RootElement;
+				parsed.Dispose();
+				return raced;
 			}
 
-			// Navigate relative path from parsePath to normalizedPath
-			string relativePath = normalizedPath[parsePath.Length..];
-			return NavigateElement(doc.RootElement, relativePath);
+			_subtreeCache.Set(parsePath, parsed);
 		}
+
+		DebugStats.RecordParse(parsePath.Length == 0 ? "(root)" : parsePath, start, length, sw.Elapsed);
+		return parsed;
 	}
 
 	public string GetJsonString(bool indented = true)
@@ -402,47 +380,6 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 		}
 
 		return JsonValueKind.Undefined;
-	}
-
-	private string? GetRawValueFromBytes(JsonStructuralIndex.IndexEntry entry)
-	{
-		ReadOnlySpan<byte> slice = _buffer.AsSpan(
-			(int)entry.StartOffset,
-			(int)(entry.EndOffset - entry.StartOffset));
-
-		return entry.ValueKind switch
-		{
-			JsonValueKind.String => DecodeJsonString(slice),
-			JsonValueKind.Number => Encoding.UTF8.GetString(slice),
-			JsonValueKind.True => "true",
-			JsonValueKind.False => "false",
-			JsonValueKind.Null => "null",
-			_ => null
-		};
-	}
-
-	private static string? DecodeJsonString(ReadOnlySpan<byte> slice)
-	{
-		// The slice includes the quotes — parse it as JSON to properly decode escapes
-		try
-		{
-			var reader = new Utf8JsonReader(slice);
-			if (reader.Read() && reader.TokenType == JsonTokenType.String)
-			{
-				return reader.GetString();
-			}
-		}
-		catch (JsonException)
-		{
-		}
-
-		// Fallback: strip quotes
-		if (slice.Length >= 2 && slice[0] == (byte)'"' && slice[^1] == (byte)'"')
-		{
-			return Encoding.UTF8.GetString(slice[1..^1]);
-		}
-
-		return Encoding.UTF8.GetString(slice);
 	}
 
 	private string FindBestIndexedAncestor(string path)

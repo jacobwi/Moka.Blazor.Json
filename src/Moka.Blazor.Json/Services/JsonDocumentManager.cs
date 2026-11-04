@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -42,6 +43,11 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 	private JsonDocument? _document;
 	private byte[]? _rentedBuffer;
 	private bool _mayHaveDuplicateKeys;
+
+	// A path lookup from the root is linear in array position and property count, so walking the tree
+	// by path was quadratic. Containers are remembered as they're enumerated (parents always come first)
+	// and lookups start from the nearest remembered ancestor.
+	private readonly ConcurrentDictionary<string, JsonElement> _containers = new(StringComparer.Ordinal);
 	private TimeSpan _parseTime;
 	private bool _disposed;
 
@@ -214,10 +220,29 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			throw new InvalidOperationException("No document is loaded.");
 		}
 
-		JsonElement current = _document.RootElement;
-		string[] segments = JsonPointerHelper.Split(jsonPointer);
+		if (string.IsNullOrEmpty(jsonPointer))
+		{
+			return _document.RootElement;
+		}
 
-		foreach (string segment in segments)
+		if (_containers.TryGetValue(jsonPointer, out JsonElement cached))
+		{
+			return cached;
+		}
+
+		JsonElement current = _document.RootElement;
+		int resolvedLength = 0;
+		for (int slash = jsonPointer.LastIndexOf('/'); slash > 0; slash = jsonPointer.LastIndexOf('/', slash - 1))
+		{
+			if (_containers.TryGetValue(jsonPointer[..slash], out JsonElement ancestor))
+			{
+				current = ancestor;
+				resolvedLength = slash;
+				break;
+			}
+		}
+
+		foreach (string segment in JsonPointerHelper.Split(jsonPointer[resolvedLength..]))
 		{
 			string unescaped = JsonPointerHelper.UnescapeSegment(segment);
 
@@ -249,6 +274,11 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 				throw new KeyNotFoundException(
 					$"Cannot navigate into a {current.ValueKind} value at path '{jsonPointer}'.");
 			}
+		}
+
+		if (current.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+		{
+			_containers.TryAdd(jsonPointer, current);
 		}
 
 		return current;
@@ -478,6 +508,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			{
 				string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Key)}";
 				JsonElement value = prop.Value;
+				RememberContainer(childPath, value);
 
 				yield return new JsonChildDescriptor(
 					childPath,
@@ -496,6 +527,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			foreach (JsonElement item in element.EnumerateArray())
 			{
 				string childPath = $"{path}/{i}";
+				RememberContainer(childPath, item);
 				int childCount = JsonObjectReader.CountChildren(item, _mayHaveDuplicateKeys);
 
 				yield return new JsonChildDescriptor(
@@ -559,6 +591,14 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 
 			// No BOM — rewind to original position
 			stream.Position = originalPosition;
+		}
+	}
+
+	private void RememberContainer(string path, JsonElement element)
+	{
+		if (element.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+		{
+			_containers.TryAdd(path, element);
 		}
 	}
 
@@ -787,6 +827,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 
 	private void DisposeDocument()
 	{
+		_containers.Clear();
 		_document?.Dispose();
 		_document = null;
 

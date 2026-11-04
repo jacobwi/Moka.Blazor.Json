@@ -138,7 +138,10 @@ internal sealed class JsonSearchEngine
 		var collector = new MatchCollector();
 		try
 		{
-			SearchSource(source, rootPath, matcher, options, collector, cancellationToken);
+			if (source.GetValueKind(rootPath) is JsonValueKind.Object or JsonValueKind.Array)
+			{
+				SearchSource(source, rootPath, matcher, options, collector, cancellationToken);
+			}
 		}
 		catch (RegexMatchTimeoutException)
 		{
@@ -345,12 +348,6 @@ internal sealed class JsonSearchEngine
 		CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
-
-		JsonValueKind kind = source.GetValueKind(path);
-		if (kind is not (JsonValueKind.Object or JsonValueKind.Array))
-		{
-			return;
-		}
 
 		foreach (JsonChildDescriptor child in source.EnumerateChildren(path))
 		{

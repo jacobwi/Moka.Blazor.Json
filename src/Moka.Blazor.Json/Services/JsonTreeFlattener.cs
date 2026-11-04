@@ -169,7 +169,7 @@ internal sealed class JsonTreeFlattener
 			_expandedPaths.Clear();
 			if (maxDepth != 0)
 			{
-				ExpandToDepthRecursive(source, "", 0, maxDepth);
+				ExpandToDepthRecursive(source, "", source.RootValueKind, 0, maxDepth);
 			}
 		}
 	}
@@ -186,7 +186,7 @@ internal sealed class JsonTreeFlattener
 	{
 		lock (_gate)
 		{
-			ExpandToDepthRecursive(source, path, 0, -1);
+			ExpandToDepthRecursive(source, path, source.GetValueKind(path), 0, -1);
 		}
 	}
 
@@ -442,9 +442,9 @@ internal sealed class JsonTreeFlattener
 		}
 	}
 
-	private void ExpandToDepthRecursive(IJsonDocumentSource source, string path, int currentDepth, int maxDepth)
+	private void ExpandToDepthRecursive(IJsonDocumentSource source, string path, JsonValueKind kind,
+		int currentDepth, int maxDepth)
 	{
-		JsonValueKind kind = source.GetValueKind(path);
 		if (kind is not (JsonValueKind.Object or JsonValueKind.Array))
 		{
 			return;
@@ -461,7 +461,7 @@ internal sealed class JsonTreeFlattener
 		{
 			if (child.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
 			{
-				ExpandToDepthRecursive(source, child.Path, currentDepth + 1, maxDepth);
+				ExpandToDepthRecursive(source, child.Path, child.ValueKind, currentDepth + 1, maxDepth);
 			}
 		}
 	}

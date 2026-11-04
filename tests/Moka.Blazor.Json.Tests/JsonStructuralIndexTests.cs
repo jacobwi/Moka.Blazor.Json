@@ -45,9 +45,8 @@ public sealed class JsonStructuralIndexTests
 		Assert.True(index.TryGetEntry("/user", out JsonStructuralIndex.IndexEntry user));
 		Assert.Equal(JsonValueKind.Object, user.ValueKind);
 
-		// /count should be indexed as a primitive
-		Assert.True(index.TryGetEntry("/count", out JsonStructuralIndex.IndexEntry count));
-		Assert.Equal(JsonValueKind.Number, count.ValueKind);
+		// Primitives are read from their parent, not indexed
+		Assert.False(index.TryGetEntry("/count", out _));
 	}
 
 	[Fact]
@@ -68,22 +67,22 @@ public sealed class JsonStructuralIndexTests
 	}
 
 	[Fact]
-	public async Task GetDirectChildren_ReturnsOnlyDirectChildren()
+	public async Task Build_Indexes_Only_Containers()
 	{
 		byte[] json = """{"a":1,"b":2,"c":{"d":3}}"""u8.ToArray();
 
 		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(json);
 
-		var children = index.GetDirectChildren("").ToList();
-
-		// Should get /a, /b, /c (3 direct children)
-		Assert.Equal(3, children.Count);
+		Assert.True(index.TryGetEntry("", out JsonStructuralIndex.IndexEntry root));
+		Assert.Equal(3, root.ChildCount);
+		Assert.True(index.TryGetEntry("/c", out _));
+		Assert.Equal(2, index.EntryCount);
 	}
 
 	[Fact]
-	public async Task IndexChildrenAsync_LazilyIndexesDeepContainers()
+	public async Task IndexChildren_Indexes_Deep_Containers_And_Records_The_Count()
 	{
-		byte[] json = """{"a":{"x":1,"y":2}}"""u8.ToArray();
+		byte[] json = """{"a":{"x":1,"y":{"z":2}}}"""u8.ToArray();
 
 		// Only index depth 0
 		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(json, 0);
@@ -92,12 +91,24 @@ public sealed class JsonStructuralIndexTests
 		Assert.True(index.TryGetEntry("/a", out JsonStructuralIndex.IndexEntry a));
 		Assert.Equal(-1, a.ChildCount);
 
-		// Lazy-index children of /a
-		await index.IndexChildrenAsync("/a", json);
+		Assert.Equal(2, index.IndexChildren("/a", json));
 
-		// Now children should be available
-		var children = index.GetDirectChildren("/a").ToList();
-		Assert.Equal(2, children.Count);
+		Assert.True(index.TryGetEntry("/a", out a));
+		Assert.Equal(2, a.ChildCount);
+		Assert.True(index.TryGetEntry("/a/y", out JsonStructuralIndex.IndexEntry y));
+		Assert.Equal(JsonValueKind.Object, y.ValueKind);
+		Assert.False(index.TryGetEntry("/a/x", out _));
+	}
+
+	[Fact]
+	public async Task Repeated_Key_Replaces_An_Earlier_Container()
+	{
+		byte[] json = """{"a":{"b":{"c":1}},"a":5}"""u8.ToArray();
+
+		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(json);
+
+		Assert.False(index.TryGetEntry("/a", out _));
+		Assert.False(index.TryGetEntry("/a/b", out _));
 	}
 
 	[Fact]

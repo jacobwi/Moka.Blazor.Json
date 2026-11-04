@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Text;
 using System.Text.Json;
 using Moka.Blazor.Json.Utilities;
 
@@ -9,9 +10,20 @@ namespace Moka.Blazor.Json.Services;
 ///     <see cref="Utf8JsonReader" /> pass. Stores byte offsets for containers,
 ///     enabling on-demand subtree parsing without loading the full DOM.
 /// </summary>
+/// <remarks>
+///     Only objects and arrays are indexed. Primitive values are read from their parsed parent, which keeps
+///     the index small (indexing every value made it roughly ten times the size of the document).
+/// </remarks>
 internal sealed class JsonStructuralIndex
 {
-	private readonly ConcurrentDictionary<string, IndexEntry> _entries = new();
+	private static readonly JsonReaderOptions ReaderOptions = new()
+	{
+		AllowTrailingCommas = true,
+		CommentHandling = JsonCommentHandling.Skip,
+		MaxDepth = 256
+	};
+
+	private readonly ConcurrentDictionary<string, IndexEntry> _entries = new(StringComparer.Ordinal);
 
 	/// <summary>
 	///     Gets the number of indexed entries.
@@ -24,93 +36,70 @@ internal sealed class JsonStructuralIndex
 	public bool TryGetEntry(string path, out IndexEntry entry) => _entries.TryGetValue(path, out entry);
 
 	/// <summary>
-	///     Gets all direct children entries of a given parent path.
-	/// </summary>
-	public IEnumerable<IndexEntry> GetDirectChildren(string parentPath)
-	{
-		string prefix = string.IsNullOrEmpty(parentPath) ? "/" : parentPath + "/";
-
-		foreach (KeyValuePair<string, IndexEntry> kvp in _entries)
-		{
-			string path = kvp.Key;
-			if (!path.StartsWith(prefix, StringComparison.Ordinal))
-			{
-				continue;
-			}
-
-			// Check it's a direct child (no further '/' after the prefix)
-			ReadOnlySpan<char> remainder = path.AsSpan(prefix.Length);
-			if (!remainder.Contains('/'))
-			{
-				yield return kvp.Value;
-			}
-		}
-	}
-
-	/// <summary>
 	///     Builds the structural index from UTF-8 JSON bytes.
 	///     Only indexes containers up to <paramref name="eagerDepthLimit" /> levels deep.
 	/// </summary>
+	/// <param name="jsonBytes">The document.</param>
+	/// <param name="eagerDepthLimit">Containers deeper than this are recorded but not read into.</param>
+	/// <param name="mayHaveDuplicateKeys">
+	///     Whether an object may repeat a key. When false, the work to make a later value replace an earlier
+	///     one is skipped.
+	/// </param>
+	/// <param name="cancellationToken">Cancellation token.</param>
 	public static Task<JsonStructuralIndex> BuildAsync(
 		ReadOnlyMemory<byte> jsonBytes,
 		int eagerDepthLimit = 1,
+		bool mayHaveDuplicateKeys = true,
 		CancellationToken cancellationToken = default) =>
-		Task.Run(() => Build(jsonBytes.Span, eagerDepthLimit, cancellationToken), cancellationToken);
+		Task.Run(() => Build(jsonBytes.Span, eagerDepthLimit, mayHaveDuplicateKeys, cancellationToken),
+			cancellationToken);
 
 	/// <summary>
-	///     Lazily indexes the immediate children of a container whose children
-	///     are not yet in the index.
+	///     Indexes the direct children of a container whose child count isn't known yet, records the count
+	///     on the container's entry, and returns it.
 	/// </summary>
-	public Task IndexChildrenAsync(
-		string parentPath,
-		ReadOnlyMemory<byte> jsonBytes,
-		CancellationToken cancellationToken = default)
+	public int IndexChildren(string parentPath, ReadOnlySpan<byte> jsonBytes, bool mayHaveDuplicateKeys = true)
 	{
-		return Task.Run(() =>
+		if (!_entries.TryGetValue(parentPath, out IndexEntry parentEntry) ||
+		    parentEntry.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
 		{
-			if (!_entries.TryGetValue(parentPath, out IndexEntry parentEntry))
-			{
-				return;
-			}
+			return 0;
+		}
 
-			if (parentEntry.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
-			{
-				return;
-			}
+		if (parentEntry.ChildCount >= 0)
+		{
+			return parentEntry.ChildCount;
+		}
 
-			ReadOnlySpan<byte> slice = jsonBytes.Span.Slice(
-				(int)parentEntry.StartOffset,
-				(int)(parentEntry.EndOffset - parentEntry.StartOffset));
+		ReadOnlySpan<byte> slice = jsonBytes.Slice(
+			(int)parentEntry.StartOffset,
+			(int)(parentEntry.EndOffset - parentEntry.StartOffset));
 
-			var reader = new Utf8JsonReader(slice, new JsonReaderOptions
-			{
-				AllowTrailingCommas = true,
-				CommentHandling = JsonCommentHandling.Skip,
-				MaxDepth = 256
-			});
+		var reader = new Utf8JsonReader(slice, ReaderOptions);
+		int count = IndexContainerChildren(ref reader, parentPath, parentEntry.Depth, parentEntry.StartOffset,
+			mayHaveDuplicateKeys);
 
-			IndexContainerChildren(ref reader, parentPath, parentEntry.Depth, jsonBytes.Span,
-				parentEntry.StartOffset, cancellationToken);
-		}, cancellationToken);
+		_entries[parentPath] = parentEntry with { ChildCount = count };
+		return count;
 	}
 
 	private static JsonStructuralIndex Build(
 		ReadOnlySpan<byte> jsonBytes,
 		int eagerDepthLimit,
+		bool mayHaveDuplicateKeys,
 		CancellationToken cancellationToken)
 	{
 		var index = new JsonStructuralIndex();
-		var reader = new Utf8JsonReader(jsonBytes, new JsonReaderOptions
-		{
-			AllowTrailingCommas = true,
-			CommentHandling = JsonCommentHandling.Skip,
-			MaxDepth = 256
-		});
+		var reader = new Utf8JsonReader(jsonBytes, ReaderOptions);
 
-		// Stack to track open containers: (path, startOffset, depth, childCount)
 		var containerStack =
 			new Stack<(string Path, long StartOffset, int Depth, int ChildCount, JsonValueKind Kind)>();
-		string? currentPropertyName = null;
+
+		// Property names are only decoded when needed (a container's path, or a possible repeated key);
+		// decoding every name allocated a string per property.
+		ReadOnlySpan<byte> pendingName = default;
+		string? pendingEscapedName = null;
+		bool hasPendingName = false;
 		int tokensProcessed = 0;
 
 		while (reader.Read())
@@ -131,16 +120,17 @@ internal sealed class JsonStructuralIndex
 						? JsonValueKind.Object
 						: JsonValueKind.Array;
 
-					string path = BuildPath(containerStack, currentPropertyName);
-					long startOffset = reader.TokenStartIndex;
-					bool repeatedKey = index.ForgetEarlierValue(path);
+					string? name = hasPendingName ? pendingEscapedName ?? Encoding.UTF8.GetString(pendingName) : null;
+					hasPendingName = false;
 
-					// Increment parent's child count
-					if (containerStack.Count > 0 && !repeatedKey)
+					string path = BuildPath(containerStack, name);
+					long startOffset = reader.TokenStartIndex;
+					if (mayHaveDuplicateKeys)
 					{
-						(string pPath, long pStart, int pDepth, int pCount, JsonValueKind pKind) = containerStack.Pop();
-						containerStack.Push((pPath, pStart, pDepth, pCount + 1, pKind));
+						index.ForgetEarlierValue(path);
 					}
+
+					IncrementChildCount(containerStack);
 
 					if (currentDepth > eagerDepthLimit)
 					{
@@ -156,7 +146,6 @@ internal sealed class JsonStructuralIndex
 						containerStack.Push((path, startOffset, currentDepth, 0, kind));
 					}
 
-					currentPropertyName = null;
 					break;
 				}
 
@@ -178,43 +167,32 @@ internal sealed class JsonStructuralIndex
 
 				case JsonTokenType.PropertyName:
 				{
-					currentPropertyName = reader.GetString();
+					hasPendingName = true;
+					if (reader.ValueIsEscaped)
+					{
+						pendingEscapedName = reader.GetString();
+						pendingName = default;
+					}
+					else
+					{
+						pendingEscapedName = null;
+						pendingName = reader.ValueSpan;
+					}
+
 					break;
 				}
 
 				default:
 				{
-					// The path must be built before the parent count goes up: for arrays the
-					// count is the element's index.
-					string? path = currentDepth <= eagerDepthLimit + 1
-						? BuildPath(containerStack, currentPropertyName)
-						: null;
-					bool repeatedKey = path is not null && index.ForgetEarlierValue(path);
-
-					if (containerStack.Count > 0 && !repeatedKey)
+					// A primitive replacing an earlier container under the same key must drop that container.
+					if (mayHaveDuplicateKeys && hasPendingName)
 					{
-						(string pPath, long pStart, int pDepth, int pCount, JsonValueKind pKind) = containerStack.Pop();
-						containerStack.Push((pPath, pStart, pDepth, pCount + 1, pKind));
+						string name = pendingEscapedName ?? Encoding.UTF8.GetString(pendingName);
+						index.ForgetEarlierValue(BuildPath(containerStack, name));
 					}
 
-					// Index primitive children of indexed containers
-					if (path is not null)
-					{
-						JsonValueKind valueKind = reader.TokenType switch
-						{
-							JsonTokenType.String => JsonValueKind.String,
-							JsonTokenType.Number => JsonValueKind.Number,
-							JsonTokenType.True => JsonValueKind.True,
-							JsonTokenType.False => JsonValueKind.False,
-							JsonTokenType.Null => JsonValueKind.Null,
-							_ => JsonValueKind.Undefined
-						};
-
-						index._entries[path] = new IndexEntry(
-							path, reader.TokenStartIndex, reader.BytesConsumed, valueKind, 0, currentDepth);
-					}
-
-					currentPropertyName = null;
+					hasPendingName = false;
+					IncrementChildCount(containerStack);
 					break;
 				}
 			}
@@ -223,36 +201,29 @@ internal sealed class JsonStructuralIndex
 		return index;
 	}
 
-	private void IndexContainerChildren(
+	private int IndexContainerChildren(
 		ref Utf8JsonReader reader,
 		string parentPath,
 		int parentDepth,
-		ReadOnlySpan<byte> fullBytes,
 		long baseOffset,
-		CancellationToken cancellationToken)
+		bool mayHaveDuplicateKeys)
 	{
 		// Read the opening token
 		if (!reader.Read())
 		{
-			return;
+			return 0;
 		}
 
 		string? currentPropertyName = null;
-		int childIndex = 0;
-		int tokensProcessed = 0;
+		int childCount = 0;
 
 		while (reader.Read())
 		{
-			if (++tokensProcessed % 5000 == 0)
-			{
-				cancellationToken.ThrowIfCancellationRequested();
-			}
-
 			switch (reader.TokenType)
 			{
 				case JsonTokenType.EndObject:
 				case JsonTokenType.EndArray:
-					return;
+					return childCount;
 
 				case JsonTokenType.PropertyName:
 					currentPropertyName = reader.GetString();
@@ -265,66 +236,67 @@ internal sealed class JsonStructuralIndex
 						? JsonValueKind.Object
 						: JsonValueKind.Array;
 
-					string childPath = currentPropertyName is not null
-						? $"{parentPath}/{JsonPointerHelper.EscapeSegment(currentPropertyName)}"
-						: $"{parentPath}/{childIndex}";
-
+					string childPath = ChildPath(parentPath, currentPropertyName, childCount);
 					long startOffset = baseOffset + reader.TokenStartIndex;
 
-					// Skip the container to find its end
 					reader.TrySkip();
 					long endOffset = baseOffset + reader.BytesConsumed;
+
+					if (mayHaveDuplicateKeys)
+					{
+						ForgetEarlierValue(childPath);
+					}
 
 					_entries[childPath] = new IndexEntry(
 						childPath, startOffset, endOffset, kind, -1, parentDepth + 1);
 
 					currentPropertyName = null;
-					childIndex++;
+					childCount++;
 					break;
 				}
 
 				default:
 				{
-					string childPath = currentPropertyName is not null
-						? $"{parentPath}/{JsonPointerHelper.EscapeSegment(currentPropertyName)}"
-						: $"{parentPath}/{childIndex}";
-
-					JsonValueKind valueKind = reader.TokenType switch
+					if (mayHaveDuplicateKeys && currentPropertyName is not null)
 					{
-						JsonTokenType.String => JsonValueKind.String,
-						JsonTokenType.Number => JsonValueKind.Number,
-						JsonTokenType.True => JsonValueKind.True,
-						JsonTokenType.False => JsonValueKind.False,
-						JsonTokenType.Null => JsonValueKind.Null,
-						_ => JsonValueKind.Undefined
-					};
-
-					_entries[childPath] = new IndexEntry(
-						childPath,
-						baseOffset + reader.TokenStartIndex,
-						baseOffset + reader.BytesConsumed,
-						valueKind,
-						0,
-						parentDepth + 1);
+						ForgetEarlierValue(ChildPath(parentPath, currentPropertyName, childCount));
+					}
 
 					currentPropertyName = null;
-					childIndex++;
+					childCount++;
 					break;
 				}
 			}
+		}
+
+		return childCount;
+	}
+
+	private static string ChildPath(string parentPath, string? propertyName, int index) =>
+		propertyName is not null
+			? $"{parentPath}/{JsonPointerHelper.EscapeSegment(propertyName)}"
+			: $"{parentPath}/{index}";
+
+	private static void IncrementChildCount(
+		Stack<(string Path, long StartOffset, int Depth, int ChildCount, JsonValueKind Kind)> containerStack)
+	{
+		if (containerStack.Count > 0)
+		{
+			(string pPath, long pStart, int pDepth, int pCount, JsonValueKind pKind) = containerStack.Pop();
+			containerStack.Push((pPath, pStart, pDepth, pCount + 1, pKind));
 		}
 	}
 
 	/// <summary>
 	///     Handles a key that repeats within one object: the later value wins (as with
 	///     <see cref="JsonElement.TryGetProperty(string, out JsonElement)" />), so everything indexed for the
-	///     earlier one is dropped. Returns whether <paramref name="path" /> was already indexed.
+	///     earlier one is dropped.
 	/// </summary>
-	private bool ForgetEarlierValue(string path)
+	private void ForgetEarlierValue(string path)
 	{
 		if (!_entries.TryRemove(path, out _))
 		{
-			return false;
+			return;
 		}
 
 		string prefix = path + "/";
@@ -335,8 +307,6 @@ internal sealed class JsonStructuralIndex
 				_entries.TryRemove(key, out _);
 			}
 		}
-
-		return true;
 	}
 
 	private static string BuildPath(
@@ -350,16 +320,9 @@ internal sealed class JsonStructuralIndex
 
 		(string parentPath, _, _, int childCount, JsonValueKind parentKind) = containerStack.Peek();
 
-		if (parentKind == JsonValueKind.Object && propertyName is not null)
-		{
-			return string.IsNullOrEmpty(parentPath)
-				? $"/{JsonPointerHelper.EscapeSegment(propertyName)}"
-				: $"{parentPath}/{JsonPointerHelper.EscapeSegment(propertyName)}";
-		}
-
-		// Array: use current child count as index (before increment)
-		return string.IsNullOrEmpty(parentPath)
-			? $"/{childCount}"
+		// Array: the current child count is the element's index (it goes up after the path is built)
+		return parentKind == JsonValueKind.Object && propertyName is not null
+			? $"{parentPath}/{JsonPointerHelper.EscapeSegment(propertyName)}"
 			: $"{parentPath}/{childCount}";
 	}
 
