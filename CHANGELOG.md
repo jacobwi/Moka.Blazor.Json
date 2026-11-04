@@ -21,6 +21,7 @@ Measured with release builds (best of 3 where repeated).
 
 ### 🔧 Build
 - CI, release and docs jobs can run on a self-hosted runner: set the `MOKA_RUNNER` repository variable to the runner's label. Pull requests always run on GitHub's runners, since a fork's PR would otherwise run its code on that machine. Delete the variable to go back
+- NuGet.org publishing uses trusted publishing: the release job exchanges its GitHub OIDC token for a short-lived API key, so no `NUGET_API_KEY` secret is needed (the old one had expired, which is why 0.6.2 never reached NuGet.org)
 
 ## [0.6.2] - 2026-11-04
 
