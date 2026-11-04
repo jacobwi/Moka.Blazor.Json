@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 
 namespace Moka.Blazor.Json.Interop;
@@ -29,13 +30,23 @@ internal sealed class MokaJsonInterop(IJSRuntime jsRuntime) : IAsyncDisposable
 	}
 
 	/// <summary>
-	///     Scrolls an element into view within a container.
+	///     Scrolls a row of the virtualized tree viewport into view.
 	/// </summary>
-	public async ValueTask ScrollIntoViewAsync(string containerId, string elementId,
+	public async ValueTask ScrollToRowAsync(string viewportId, int rowIndex,
 		CancellationToken cancellationToken = default)
 	{
 		IJSObjectReference module = await GetModuleAsync().ConfigureAwait(false);
-		await module.InvokeVoidAsync("scrollIntoView", cancellationToken, containerId, elementId).ConfigureAwait(false);
+		await module.InvokeVoidAsync("scrollToRow", cancellationToken, viewportId, rowIndex).ConfigureAwait(false);
+	}
+
+	/// <summary>
+	///     Suppresses browser defaults (find bar, caret jumps) for the viewer's keyboard shortcuts.
+	/// </summary>
+	public async ValueTask AttachKeyGuardsAsync(ElementReference viewerRoot,
+		CancellationToken cancellationToken = default)
+	{
+		IJSObjectReference module = await GetModuleAsync().ConfigureAwait(false);
+		await module.InvokeVoidAsync("attachKeyGuards", cancellationToken, viewerRoot).ConfigureAwait(false);
 	}
 
 	/// <summary>

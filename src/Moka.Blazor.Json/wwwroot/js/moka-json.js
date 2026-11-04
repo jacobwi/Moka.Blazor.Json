@@ -32,16 +32,85 @@ export async function copyToClipboard(text) {
 }
 
 /**
- * Scrolls an element into view within a container.
- * @param {string} containerId - The container element ID.
- * @param {string} elementId - The target element ID to scroll into view.
+ * Scrolls a row of the virtualized tree into view, centering it when it is off screen.
+ * The row may not be in the DOM yet: Virtualize only renders rows near the scroll position,
+ * so jump to an estimated offset first and wait for Virtualize to render the target.
+ * @param {string} viewportId - The tree viewport element ID.
+ * @param {number} rowIndex - Index of the row in the flattened node list.
  */
-export function scrollIntoView(containerId, elementId) {
-    const container = document.getElementById(containerId);
-    const element = document.getElementById(elementId);
-    if (container && element) {
-        element.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+export function scrollToRow(viewportId, rowIndex) {
+    const viewport = document.getElementById(viewportId);
+    if (!viewport) return;
+
+    const token = (viewport.__mokaScrollToken || 0) + 1;
+    viewport.__mokaScrollToken = token;
+    const selector = `#moka-node-${rowIndex}`;
+
+    const reveal = (row) => {
+        const vr = viewport.getBoundingClientRect();
+        const rr = row.getBoundingClientRect();
+        if (rr.top < vr.top || rr.bottom > vr.bottom) {
+            viewport.scrollTop += (rr.top - vr.top) - (viewport.clientHeight - rr.height) / 2;
+        }
+    };
+
+    const existing = viewport.querySelector(selector);
+    if (existing) {
+        reveal(existing);
+        return;
     }
+
+    const rows = viewport.querySelectorAll('.moka-json-node');
+    let rowHeight = 20;
+    if (rows.length > 1) {
+        const first = rows[0].getBoundingClientRect();
+        const last = rows[rows.length - 1].getBoundingClientRect();
+        rowHeight = Math.max(1, (last.bottom - first.top) / rows.length);
+    } else if (rows.length === 1) {
+        rowHeight = Math.max(1, rows[0].getBoundingClientRect().height);
+    }
+
+    viewport.scrollTop = Math.max(0, rowIndex * rowHeight - viewport.clientHeight / 2);
+
+    let frames = 0;
+    const poll = () => {
+        if (viewport.__mokaScrollToken !== token || !viewport.isConnected) return;
+        const row = viewport.querySelector(selector);
+        if (row) {
+            reveal(row);
+            return;
+        }
+        if (++frames < 120) requestAnimationFrame(poll);
+    };
+    requestAnimationFrame(poll);
+}
+
+/**
+ * Stops browser defaults for the viewer's keyboard shortcuts. Blazor cannot call
+ * preventDefault conditionally per key, so this runs alongside the .NET handlers.
+ * @param {HTMLElement} root - The viewer root element.
+ */
+export function attachKeyGuards(root) {
+    if (!root || root.__mokaKeyGuards) return;
+    root.__mokaKeyGuards = true;
+    root.addEventListener('keydown', (e) => {
+        const key = e.key;
+        if ((e.ctrlKey || e.metaKey) && !e.altKey && (key === 'f' || key === 'F')) {
+            e.preventDefault();
+            return;
+        }
+
+        const searchOpen = root.querySelector('.moka-json-search') !== null;
+        if (key === 'F3' && searchOpen) {
+            e.preventDefault();
+            return;
+        }
+
+        const inSearchInput = e.target instanceof HTMLInputElement && e.target.closest('.moka-json-search');
+        if (inSearchInput && (key === 'Enter' || key === 'ArrowUp' || key === 'ArrowDown')) {
+            e.preventDefault();
+        }
+    });
 }
 
 /**

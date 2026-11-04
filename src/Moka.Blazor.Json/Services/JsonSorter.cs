@@ -1,5 +1,6 @@
 using System.Text;
 using System.Text.Json;
+using Moka.Blazor.Json.Utilities;
 
 namespace Moka.Blazor.Json.Services;
 
@@ -18,7 +19,7 @@ internal static class JsonSorter
 	public static string SortKeys(JsonElement element, bool indented = true)
 	{
 		using var stream = new MemoryStream();
-		using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = indented });
+		using var writer = new Utf8JsonWriter(stream, JsonFormatting.Writer(indented));
 		WriteSorted(element, writer, false);
 		writer.Flush();
 		return Encoding.UTF8.GetString(stream.GetBuffer(), 0, (int)stream.Length);
@@ -33,7 +34,7 @@ internal static class JsonSorter
 	public static string SortKeysRecursive(JsonElement element, bool indented = true)
 	{
 		using var stream = new MemoryStream();
-		using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = indented });
+		using var writer = new Utf8JsonWriter(stream, JsonFormatting.Writer(indented));
 		WriteSorted(element, writer, true);
 		writer.Flush();
 		return Encoding.UTF8.GetString(stream.GetBuffer(), 0, (int)stream.Length);
@@ -46,13 +47,12 @@ internal static class JsonSorter
 			case JsonValueKind.Object:
 				writer.WriteStartObject();
 
-				var properties = element.EnumerateObject()
-					.OrderBy(p => p.Name, StringComparer.Ordinal)
-					.ToList();
+				List<KeyValuePair<string, JsonElement>> properties = JsonObjectReader.GetProperties(element);
+				properties.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
 
-				foreach (JsonProperty prop in properties)
+				foreach (KeyValuePair<string, JsonElement> prop in properties)
 				{
-					writer.WritePropertyName(prop.Name);
+					writer.WritePropertyName(prop.Key);
 					if (recursive)
 					{
 						WriteSorted(prop.Value, writer, true);

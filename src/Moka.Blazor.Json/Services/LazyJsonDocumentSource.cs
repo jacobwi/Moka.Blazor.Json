@@ -19,15 +19,20 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 	private readonly JsonStructuralIndex _index;
 	private readonly ILogger _logger;
 	private readonly LruCache<string, JsonDocument> _subtreeCache;
+	private readonly bool _mayHaveDuplicateKeys;
 	private bool _disposed;
 
-	private LazyJsonDocumentSource(byte[] buffer, JsonStructuralIndex index, TimeSpan parseTime, ILogger logger)
+	private LazyJsonDocumentSource(byte[] buffer, JsonStructuralIndex index, bool mayHaveDuplicateKeys,
+		TimeSpan parseTime, ILogger logger)
 	{
 		_buffer = buffer;
 		_index = index;
+		_mayHaveDuplicateKeys = mayHaveDuplicateKeys;
 		ParseTime = parseTime;
 		_logger = logger;
-		_subtreeCache = new LruCache<string, JsonDocument>(50);
+		// Callers on other threads may still be reading an element from an evicted document
+		// (search and flatten run concurrently), so eviction leaves disposal to the GC.
+		_subtreeCache = new LruCache<string, JsonDocument>(50, disposeOnEvict: false);
 		DocumentSizeBytes = buffer.Length;
 		RootValueKind = DetermineRootValueKind();
 
@@ -96,14 +101,17 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 		}
 
 		var sw = Stopwatch.StartNew();
+		byte[] json = buffer;
+		Task<bool> duplicateScan = Task.Run(() => JsonObjectReader.MayContainDuplicateKeys(json), cancellationToken);
 		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(
 			buffer, 1, cancellationToken).ConfigureAwait(false);
+		bool mayHaveDuplicateKeys = await duplicateScan.ConfigureAwait(false);
 		sw.Stop();
 
 		logger.LogDebug("Built lazy JSON index: {Size} bytes, {Entries} entries, {Time}ms",
 			buffer.Length, index.EntryCount, sw.Elapsed.TotalMilliseconds);
 
-		return new LazyJsonDocumentSource(buffer, index, sw.Elapsed, logger);
+		return new LazyJsonDocumentSource(buffer, index, mayHaveDuplicateKeys, sw.Elapsed, logger);
 	}
 
 	#region IJsonDocumentSource
@@ -142,13 +150,7 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 		}
 
 		// Not in index — parse the container to count
-		JsonElement element = GetElement(path);
-		return element.ValueKind switch
-		{
-			JsonValueKind.Object => CountObjectProperties(element),
-			JsonValueKind.Array => element.GetArrayLength(),
-			_ => 0
-		};
+		return GetElementChildCount(GetElement(path));
 	}
 
 	public IEnumerable<JsonChildDescriptor> EnumerateChildren(string path)
@@ -167,11 +169,10 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 
 		if (element.ValueKind == JsonValueKind.Object)
 		{
-			foreach (JsonProperty prop in element.EnumerateObject())
+			foreach (KeyValuePair<string, JsonElement> prop in EnumerateProperties(element))
 			{
-				string childPath = string.IsNullOrEmpty(normalizedPath)
-					? $"/{JsonPointerHelper.EscapeSegment(prop.Name)}"
-					: $"{normalizedPath}/{JsonPointerHelper.EscapeSegment(prop.Name)}";
+				string childPath = $"{normalizedPath}/{JsonPointerHelper.EscapeSegment(prop.Key)}";
+				JsonElement value = prop.Value;
 
 				int childCount;
 				if (_index.TryGetEntry(childPath, out JsonStructuralIndex.IndexEntry entry) && entry.ChildCount >= 0)
@@ -180,17 +181,17 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 				}
 				else
 				{
-					childCount = GetElementChildCount(prop.Value);
+					childCount = GetElementChildCount(value);
 				}
 
 				result.Add(new JsonChildDescriptor(
 					childPath,
-					prop.Name,
+					prop.Key,
 					null,
-					prop.Value.ValueKind,
-					prop.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array
+					value.ValueKind,
+					value.ValueKind is JsonValueKind.Object or JsonValueKind.Array
 						? null
-						: GetPrimitiveRawValue(prop.Value),
+						: GetPrimitiveRawValue(value),
 					childCount));
 			}
 		}
@@ -199,9 +200,7 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 			int i = 0;
 			foreach (JsonElement item in element.EnumerateArray())
 			{
-				string childPath = string.IsNullOrEmpty(normalizedPath)
-					? $"/{i}"
-					: $"{normalizedPath}/{i}";
+				string childPath = $"{normalizedPath}/{i}";
 
 				int childCount;
 				if (_index.TryGetEntry(childPath, out JsonStructuralIndex.IndexEntry entry) && entry.ChildCount >= 0)
@@ -336,21 +335,12 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 	{
 		ObjectDisposedException.ThrowIf(_disposed, this);
 
-		if (!indented)
-		{
-			return Encoding.UTF8.GetString(_buffer);
-		}
-
-		// For indented output, we need to re-format
-		using var doc = JsonDocument.Parse(_buffer.AsMemory(), new JsonDocumentOptions
-		{
-			AllowTrailingCommas = true,
-			CommentHandling = JsonCommentHandling.Skip,
-			MaxDepth = 256
-		});
+		// Re-write even when not indented: the raw buffer keeps the source's own formatting,
+		// comments and trailing commas, so it is neither minified nor strict JSON.
+		using var doc = JsonDocument.Parse(_buffer.AsMemory(), JsonFormatting.LenientDocument);
 
 		using var stream = new MemoryStream();
-		using var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true });
+		using var writer = new Utf8JsonWriter(stream, JsonFormatting.Writer(indented));
 		doc.RootElement.WriteTo(writer);
 		writer.Flush();
 		return Encoding.UTF8.GetString(stream.GetBuffer(), 0, (int)stream.Length);
@@ -380,8 +370,7 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 
 	#region Private Helpers
 
-	private static string NormalizePath(string? path) =>
-		string.IsNullOrEmpty(path) || path == "/" ? "" : path;
+	private static string NormalizePath(string? path) => path ?? "";
 
 	private JsonValueKind DetermineRootValueKind()
 	{
@@ -497,7 +486,7 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 		}
 
 		JsonElement current = element;
-		string[] segments = relativePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+		string[] segments = JsonPointerHelper.Split(relativePath);
 
 		foreach (string segment in segments)
 		{
@@ -530,15 +519,22 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 		return current;
 	}
 
-	private static int CountObjectProperties(JsonElement element)
+	private IEnumerable<KeyValuePair<string, JsonElement>> EnumerateProperties(JsonElement obj)
 	{
-		int count = 0;
-		foreach (JsonProperty _ in element.EnumerateObject())
+		if (_mayHaveDuplicateKeys)
 		{
-			count++;
+			return JsonObjectReader.GetProperties(obj);
 		}
 
-		return count;
+		return EnumerateRaw(obj);
+
+		static IEnumerable<KeyValuePair<string, JsonElement>> EnumerateRaw(JsonElement element)
+		{
+			foreach (JsonProperty prop in element.EnumerateObject())
+			{
+				yield return new KeyValuePair<string, JsonElement>(prop.Name, prop.Value);
+			}
+		}
 	}
 
 	private static string? GetPrimitiveRawValue(JsonElement element)
@@ -554,15 +550,8 @@ internal sealed class LazyJsonDocumentSource : IJsonDocumentSource
 		};
 	}
 
-	private static int GetElementChildCount(JsonElement element)
-	{
-		return element.ValueKind switch
-		{
-			JsonValueKind.Object => CountObjectProperties(element),
-			JsonValueKind.Array => element.GetArrayLength(),
-			_ => 0
-		};
-	}
+	private int GetElementChildCount(JsonElement element) =>
+		JsonObjectReader.CountChildren(element, _mayHaveDuplicateKeys);
 
 	private static string GetLastSegment(string path)
 	{

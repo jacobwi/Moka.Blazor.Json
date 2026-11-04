@@ -14,4 +14,18 @@ internal static class JsonPointerHelper
 	///     Unescapes a single JSON Pointer segment: replaces <c>~1</c> with <c>/</c> then <c>~0</c> with <c>~</c>.
 	/// </summary>
 	public static string UnescapeSegment(string segment) => segment.Replace("~1", "/").Replace("~0", "~");
+
+	/// <summary>
+	///     Splits a pointer into its (still escaped) segments. <c>""</c> is the whole document and has no
+	///     segments; <c>"/"</c> is the property with an empty name and has one empty segment.
+	/// </summary>
+	public static string[] Split(string? pointer)
+	{
+		if (string.IsNullOrEmpty(pointer))
+		{
+			return [];
+		}
+
+		return pointer[0] == '/' ? pointer[1..].Split('/') : pointer.Split('/');
+	}
 }

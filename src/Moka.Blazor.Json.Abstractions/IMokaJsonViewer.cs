@@ -34,9 +34,15 @@ public interface IMokaJsonViewer
 	void CollapseAll();
 
 	/// <summary>
-	///     Expands all nodes in the tree.
+	///     Starts expanding all nodes in the tree without waiting for it to finish.
+	///     Errors are reported through <c>OnError</c>. Use <see cref="ExpandAllAsync" /> to await it.
 	/// </summary>
 	void ExpandAll();
+
+	/// <summary>
+	///     Expands all nodes in the tree and completes once the tree has been refreshed.
+	/// </summary>
+	ValueTask ExpandAllAsync();
 
 	/// <summary>
 	///     Initiates a search with the given query.
@@ -49,14 +55,26 @@ public interface IMokaJsonViewer
 		CancellationToken cancellationToken = default);
 
 	/// <summary>
-	///     Navigates to the next search match.
+	///     Starts navigating to the next search match without waiting for it to finish.
+	///     Errors are reported through <c>OnError</c>. Use <see cref="NextMatchAsync" /> to await it.
 	/// </summary>
 	void NextMatch();
 
 	/// <summary>
-	///     Navigates to the previous search match.
+	///     Navigates to the next search match, expanding and scrolling to it.
+	/// </summary>
+	ValueTask NextMatchAsync();
+
+	/// <summary>
+	///     Starts navigating to the previous search match without waiting for it to finish.
+	///     Errors are reported through <c>OnError</c>. Use <see cref="PreviousMatchAsync" /> to await it.
 	/// </summary>
 	void PreviousMatch();
+
+	/// <summary>
+	///     Navigates to the previous search match, expanding and scrolling to it.
+	/// </summary>
+	ValueTask PreviousMatchAsync();
 
 	/// <summary>
 	///     Clears the current search results and highlighting.
@@ -64,14 +82,26 @@ public interface IMokaJsonViewer
 	void ClearSearch();
 
 	/// <summary>
-	///     Undoes the last edit operation. Only available when editing is enabled.
+	///     Starts undoing the last edit without waiting for it to finish. Only available when editing is
+	///     enabled. Errors are reported through <c>OnError</c>. Use <see cref="UndoAsync" /> to await it.
 	/// </summary>
 	void Undo();
 
 	/// <summary>
-	///     Redoes the last undone edit operation. Only available when editing is enabled.
+	///     Undoes the last edit operation. Only available when editing is enabled.
+	/// </summary>
+	ValueTask UndoAsync();
+
+	/// <summary>
+	///     Starts redoing the last undone edit without waiting for it to finish. Only available when editing
+	///     is enabled. Errors are reported through <c>OnError</c>. Use <see cref="RedoAsync" /> to await it.
 	/// </summary>
 	void Redo();
+
+	/// <summary>
+	///     Redoes the last undone edit operation. Only available when editing is enabled.
+	/// </summary>
+	ValueTask RedoAsync();
 
 	/// <summary>
 	///     Gets the current JSON content as a formatted string.

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Components;
+using Moka.Blazor.Json.Interop;
 using Moka.Blazor.Json.Models;
 
 namespace Moka.Blazor.Json.Components;
@@ -93,5 +94,12 @@ public sealed partial class MokaJsonTreeViewport : ComponentBase
 	[Parameter]
 	public bool ReadOnly { get; set; }
 
+	[Inject] private MokaJsonInterop Interop { get; set; } = null!;
+
 	private string ViewportId { get; } = $"moka-viewport-{Guid.NewGuid():N}";
+
+	/// <summary>
+	///     Scrolls the row at <paramref name="rowIndex" /> of <see cref="Nodes" /> into view.
+	/// </summary>
+	public ValueTask ScrollToRowAsync(int rowIndex) => Interop.ScrollToRowAsync(ViewportId, rowIndex);
 }

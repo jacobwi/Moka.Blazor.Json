@@ -73,6 +73,10 @@
     position: relative;
 }
 
+.moka-json-viewer:focus {
+    outline: none;
+}
+
 /* ---- Toolbar ---- */
 .moka-json-toolbar {
     display: flex;

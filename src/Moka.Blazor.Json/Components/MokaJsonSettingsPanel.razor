@@ -2,7 +2,7 @@
 
 @if (IsVisible)
 {
-	<div class="moka-json-settings-panel" @onclick:stopPropagation="true">
+	<div class="moka-json-settings-panel" @onclick:stopPropagation="true" @onkeydown:stopPropagation="true">
 		<div class="moka-json-settings-header">
 			<span>Settings</span>
 			<button class="moka-json-settings-close" @onclick="OnDismiss" title="Close">&times;</button>

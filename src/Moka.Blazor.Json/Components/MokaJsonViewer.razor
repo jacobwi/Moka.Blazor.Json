@@ -4,7 +4,7 @@
 	<link href="_content/Moka.Blazor.Json/css/moka-json.css" rel="stylesheet"/>
 </HeadContent>
 
-<div class="moka-json-viewer @(WordWrap ? "moka-json-viewer--word-wrap" : "")" @ref="_viewerRef" style="@ComputedStyle" @attributes="AdditionalAttributes"
+<div class="moka-json-viewer @(WordWrap ? "moka-json-viewer--word-wrap" : "")" @ref="_viewerRef" style="@ComputedStyle" tabindex="-1" @attributes="AdditionalAttributes"
      data-moka-json-theme="@ThemeAttribute"
      @onkeydown="HandleKeyDown">
 
@@ -96,15 +96,17 @@
 
 		@if (_showSearch)
 		{
-			<MokaJsonSearchOverlay Query="@_searchQuery"
+			<MokaJsonSearchOverlay @ref="_searchOverlay"
+			                       Query="@_searchQuery"
 			                       MatchCount="@_searchEngine.MatchCount"
 			                       ActiveMatchIndex="@_searchEngine.ActiveMatchIndex"
+			                       IsPending="@_searchStale"
 			                       CaseSensitive="@_searchCaseSensitive"
 			                       UseRegex="@_searchUseRegex"
 			                       OnQueryChanged="HandleSearchQueryChanged"
 			                       OnNext="HandleSearchNext"
 			                       OnPrevious="HandleSearchPrevious"
-			                       OnClose="ToggleSearch"
+			                       OnClose="CloseSearchAsync"
 			                       OnCaseSensitiveChanged="HandleCaseSensitiveChanged"
 			                       OnRegexChanged="HandleRegexChanged"/>
 		}
@@ -116,7 +118,8 @@
 			                    OnNavigate="HandleBreadcrumbNavigate"/>
 		}
 
-		<MokaJsonTreeViewport Nodes="@_flatNodes"
+		<MokaJsonTreeViewport @ref="_viewport"
+		                      Nodes="@_flatNodes"
 		                      SelectedPath="@SelectedPath"
 		                      ShowLineNumbers="ShowLineNumbers"
 		                      ShowChildCount="ShowChildCount"

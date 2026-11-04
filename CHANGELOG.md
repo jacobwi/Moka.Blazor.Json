@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.6.2] - 2026-11-04
+
+### 🐛 Fixed
+- **Search navigation**: Enter, F3, the ▲/▼ buttons and now ArrowUp/ArrowDown move to the next/previous match *and* scroll it into view. Previously the active match changed but the virtualized tree never scrolled, so off-screen matches looked like nothing happened
+- **First Enter after typing**: pressing Enter before the search debounce fired navigated the old results and was then reset to match 1. It now runs the pending search immediately and lands on its first match. The counter shows "Searching..." while results are stale
+- **Search thread safety**: results were written on a background thread while the UI read them, and overlapping searches (fast typing on large documents) shared the same lists. Searches now build their own result list, superseded searches are cancelled, and the tree flattener's expand/match state is guarded by a lock
+- **Regex search**: a key and value matching on the same node produced a duplicate result. A catastrophic pattern (`(a+)+$`) threw `RegexMatchTimeoutException` out of the search handler instead of returning no matches
+- **Scoped search**: with "Scope to This Node" active, search covered the whole document and navigated to matches outside the visible subtree. It now searches the scoped node and re-runs when the scope changes
+- Search toggles in the settings panel didn't re-run the current search. Results also refresh after an edit instead of being cleared
+- `Ctrl+F` no longer opens the browser's find bar when focus is in the viewer, and it focuses the search box (it used to only toggle). The search box is focused when opened. `Ctrl+Z` typed in the search box no longer undoes document edits
+- `SearchAsync()` now highlights results, expands to the first match and scrolls to it. `NavigateToAsync()` scrolls to the node
+- **Lazy mode (large documents)**: primitives in arrays were indexed one slot too far, so `/items/1` could report the value of `/items/0`, objects after a primitive were treated as primitives, and search/expand skipped everything inside them
+- **Edits on real-world documents**: editing a document with comments, trailing commas, or nesting deeper than 64 levels threw a reader exception. Edits now parse with the same options as loading
+- **Rename onto an existing key** silently dropped the other property. It is now rejected with "Duplicate key"
+- **Editing a value under a key containing `/` or `~`** added a new `a~1b` property instead of changing `a/b`
+- **Unicode escaping**: edits, sort, copy and export rewrote every non-ASCII character as `\uXXXX` (`é` became `é`) and that text was sent through `JsonChanged`. Output now keeps the original characters
+- **Undo/redo**: one edit couldn't be undone, two edits undid two steps at once, and redo never reached the latest state. History now records the state before the first edit and after every edit, and is cleared when a new document is loaded
+- Edits no longer collapse the tree back to the default depth or drop the current scope. The expanded state is kept across the re-parse
+- A new `Json` value arriving while a previous one was still parsing could leave the older document on screen and leak the newer one. Loads now carry a version and stale results are discarded
+- "Rename Key" was offered for array elements, and `OnNodeSelected` reported the index as `PropertyName` for array elements (now `null`, as documented)
+- Toggling Read-only in the settings panel didn't add or remove the edit actions in the context menu
+- Changing "Show child count" or Read-only didn't re-render existing rows
+- A failed delete or add replaced the whole tree with an error panel. It now shows a toast
+- Lazy minified output (`GetJsonString(false)`, Minify + Copy/Export) returned the original bytes including comments and formatting instead of minified JSON
+- The lazy subtree cache disposed evicted documents that a concurrent search or flatten could still be reading
+- Number edits accepted `1,000`, `NaN` and `.5`, which then failed with a parser error
+- Streaming search threw on a regex timeout
+- AI context summary reported one property too many in "... (N more properties)"
+- **Null values can be edited.** Previously a `null` could only be "changed" to `null`, so a property created with "Add Property" was stuck. The input is stored as whatever JSON it parses as (number, boolean, quoted string, object, array), or as a string otherwise
+- **Empty key vs root**: the path `"/"` (a property named `""`) was treated as the root everywhere, so `{"": 5}` showed the whole document under that row and couldn't be edited or deleted. `""` is now the root and `"/"` the empty key, per RFC 6901, in both small and large documents, the breadcrumb, Copy Path and the AI context
+- **Repeated keys**: `{"a":1,"a":2}` showed two rows that both resolved to one path, small documents returned the last value and large ones the first, and editing such a document threw. A repeated key now shows once, in its first position, with the last value (what `JSON.parse` and `TryGetProperty` return), in both modes. Edits, sort, child counts and node counts follow the same rule. Documents without repeated keys skip this work after a fast check at load
+- **Settings panel choices were undone by any parent re-render** (they were written into the component's parameters). A choice now sticks until the parent passes a different value for that parameter
+- `ExpandAll()`, `NextMatch()`, `PreviousMatch()`, `Undo()` and `Redo()` were `async void`: an exception could crash the circuit and callers couldn't wait for them. They now report errors through `OnError` (see the new async methods below)
+- Copy Path quoted a key like `" 1"` as an array index (`$[1]`) and didn't escape backslashes; the breadcrumb showed numeric object keys as indexes
+- Replacing or removing a property that doesn't exist now throws instead of quietly adding it or doing nothing
+
+### ✨ New
+- `IMokaJsonViewer.ExpandAllAsync()`, `NextMatchAsync()`, `PreviousMatchAsync()`, `UndoAsync()` and `RedoAsync()` return when the work is done. They, `NavigateToAsync()` and `SearchAsync()` run on the component's dispatcher, so they can be called from any thread. If you implement `IMokaJsonViewer` yourself, add these five methods
+
+### 🔧 Changed
+- `NavigateToAsync("/")` now means the property named `""`, not the root. Use `""` for the root
+- `F2` (rename key) and `Delete` (delete node) now work on the selected node in edit mode. The context menu already advertised them
+- `Ctrl+Shift+Z` also redoes, and `Cmd` works in place of `Ctrl` on macOS
+- Removed the `Ctrl+C` hint from "Copy Value": it was never wired and would fight normal text copying
+- Selection is cleared when a different document is loaded
+
+### 🧪 Tests
+- **266 tests** (up from 208): search keyboard navigation and scrolling, debounce flush, the lazy index, edit escaping and rename collisions, undo/redo, flattener helpers, null editing, empty and repeated keys in both document modes, settings persistence, and the async API
+
 ## [0.6.1] - 2026-10-31
 
 ### 📦 Dependencies

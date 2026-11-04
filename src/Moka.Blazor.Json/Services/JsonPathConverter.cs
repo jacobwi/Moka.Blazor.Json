@@ -30,11 +30,7 @@ internal static class JsonPathConverter
 			return "$";
 		}
 
-		string[] segments = jsonPointer.Split('/', StringSplitOptions.RemoveEmptyEntries);
-		if (segments.Length == 0)
-		{
-			return "$";
-		}
+		string[] segments = JsonPointerHelper.Split(jsonPointer);
 
 		string result = "$";
 
@@ -43,10 +39,9 @@ internal static class JsonPathConverter
 			// Unescape JSON Pointer encoding
 			string unescaped = JsonPointerHelper.UnescapeSegment(segment);
 
-			if (int.TryParse(unescaped, out int index))
-				// Array index
+			if (IsArrayIndex(unescaped))
 			{
-				result += $"[{index}]";
+				result += $"[{unescaped}]";
 			}
 			else if (NeedsQuoting(unescaped))
 				// Property with special characters
@@ -75,24 +70,17 @@ internal static class JsonPathConverter
 
 		foreach (char c in propertyName)
 		{
-			if (c == '.' || c == ' ' || c == '[' || c == ']' || c == '"' || c == '\'' || c == '/')
+			if (c is '.' or ' ' or '[' or ']' or '"' or '\'' or '/' or '\\')
 			{
 				return true;
 			}
 		}
 
-		// Check if first char is a digit (would look like array index)
-		if (char.IsDigit(propertyName[0]))
-			// Only quote if it's not purely numeric (pure numeric is handled as array index)
-		{
-			if (!int.TryParse(propertyName, out _))
-			{
-				return true;
-			}
-		}
-
-		return false;
+		// A leading digit would read as an array index; all-digit segments are rendered as one.
+		return char.IsAsciiDigit(propertyName[0]) && !IsArrayIndex(propertyName);
 	}
 
-	private static string EscapeQuotes(string value) => value.Replace("\"", "\\\"");
+	private static bool IsArrayIndex(string segment) => segment.Length > 0 && segment.All(char.IsAsciiDigit);
+
+	private static string EscapeQuotes(string value) => value.Replace("\\", "\\\\").Replace("\"", "\\\"");
 }

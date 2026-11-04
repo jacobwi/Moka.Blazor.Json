@@ -133,9 +133,10 @@ internal sealed class JsonStructuralIndex
 
 					string path = BuildPath(containerStack, currentPropertyName);
 					long startOffset = reader.TokenStartIndex;
+					bool repeatedKey = index.ForgetEarlierValue(path);
 
 					// Increment parent's child count
-					if (containerStack.Count > 0)
+					if (containerStack.Count > 0 && !repeatedKey)
 					{
 						(string pPath, long pStart, int pDepth, int pCount, JsonValueKind pKind) = containerStack.Pop();
 						containerStack.Push((pPath, pStart, pDepth, pCount + 1, pKind));
@@ -147,8 +148,8 @@ internal sealed class JsonStructuralIndex
 						reader.TrySkip();
 						long endOffset = reader.BytesConsumed;
 
-						index._entries.TryAdd(path, new IndexEntry(
-							path, startOffset, endOffset, kind, -1, currentDepth));
+						index._entries[path] = new IndexEntry(
+							path, startOffset, endOffset, kind, -1, currentDepth);
 					}
 					else
 					{
@@ -168,8 +169,8 @@ internal sealed class JsonStructuralIndex
 							containerStack.Pop();
 						long endOffset = reader.BytesConsumed;
 
-						index._entries.TryAdd(cPath, new IndexEntry(
-							cPath, cStart, endOffset, cKind, cChildCount, cDepth));
+						index._entries[cPath] = new IndexEntry(
+							cPath, cStart, endOffset, cKind, cChildCount, cDepth);
 					}
 
 					break;
@@ -183,17 +184,22 @@ internal sealed class JsonStructuralIndex
 
 				default:
 				{
-					// Primitive value — increment parent child count
-					if (containerStack.Count > 0)
+					// The path must be built before the parent count goes up: for arrays the
+					// count is the element's index.
+					string? path = currentDepth <= eagerDepthLimit + 1
+						? BuildPath(containerStack, currentPropertyName)
+						: null;
+					bool repeatedKey = path is not null && index.ForgetEarlierValue(path);
+
+					if (containerStack.Count > 0 && !repeatedKey)
 					{
 						(string pPath, long pStart, int pDepth, int pCount, JsonValueKind pKind) = containerStack.Pop();
 						containerStack.Push((pPath, pStart, pDepth, pCount + 1, pKind));
 					}
 
 					// Index primitive children of indexed containers
-					if (currentDepth <= eagerDepthLimit + 1)
+					if (path is not null)
 					{
-						string path = BuildPath(containerStack, currentPropertyName);
 						JsonValueKind valueKind = reader.TokenType switch
 						{
 							JsonTokenType.String => JsonValueKind.String,
@@ -204,8 +210,8 @@ internal sealed class JsonStructuralIndex
 							_ => JsonValueKind.Undefined
 						};
 
-						index._entries.TryAdd(path, new IndexEntry(
-							path, reader.TokenStartIndex, reader.BytesConsumed, valueKind, 0, currentDepth));
+						index._entries[path] = new IndexEntry(
+							path, reader.TokenStartIndex, reader.BytesConsumed, valueKind, 0, currentDepth);
 					}
 
 					currentPropertyName = null;
@@ -269,8 +275,8 @@ internal sealed class JsonStructuralIndex
 					reader.TrySkip();
 					long endOffset = baseOffset + reader.BytesConsumed;
 
-					_entries.TryAdd(childPath, new IndexEntry(
-						childPath, startOffset, endOffset, kind, -1, parentDepth + 1));
+					_entries[childPath] = new IndexEntry(
+						childPath, startOffset, endOffset, kind, -1, parentDepth + 1);
 
 					currentPropertyName = null;
 					childIndex++;
@@ -293,13 +299,13 @@ internal sealed class JsonStructuralIndex
 						_ => JsonValueKind.Undefined
 					};
 
-					_entries.TryAdd(childPath, new IndexEntry(
+					_entries[childPath] = new IndexEntry(
 						childPath,
 						baseOffset + reader.TokenStartIndex,
 						baseOffset + reader.BytesConsumed,
 						valueKind,
 						0,
-						parentDepth + 1));
+						parentDepth + 1);
 
 					currentPropertyName = null;
 					childIndex++;
@@ -307,6 +313,30 @@ internal sealed class JsonStructuralIndex
 				}
 			}
 		}
+	}
+
+	/// <summary>
+	///     Handles a key that repeats within one object: the later value wins (as with
+	///     <see cref="JsonElement.TryGetProperty(string, out JsonElement)" />), so everything indexed for the
+	///     earlier one is dropped. Returns whether <paramref name="path" /> was already indexed.
+	/// </summary>
+	private bool ForgetEarlierValue(string path)
+	{
+		if (!_entries.TryRemove(path, out _))
+		{
+			return false;
+		}
+
+		string prefix = path + "/";
+		foreach (string key in _entries.Keys)
+		{
+			if (key.StartsWith(prefix, StringComparison.Ordinal))
+			{
+				_entries.TryRemove(key, out _);
+			}
+		}
+
+		return true;
 	}
 
 	private static string BuildPath(

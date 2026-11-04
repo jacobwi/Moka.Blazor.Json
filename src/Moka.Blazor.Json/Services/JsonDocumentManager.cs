@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Diagnostics;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -40,6 +41,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 	private readonly MokaJsonViewerOptions _options = options.Value;
 	private JsonDocument? _document;
 	private byte[]? _rentedBuffer;
+	private bool _mayHaveDuplicateKeys;
 	private TimeSpan _parseTime;
 	private bool _disposed;
 
@@ -122,6 +124,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 
 		DocumentSizeBytes = byteCount;
 		_parseTime = sw.Elapsed;
+		_mayHaveDuplicateKeys = JsonObjectReader.MayContainDuplicateKeys(JsonMarshal.GetRawUtf8Value(_document.RootElement));
 		logger.LogDebug("Parsed JSON document: {Size}, {ParseTime}ms", FormatBytes(byteCount),
 			_parseTime.TotalMilliseconds);
 
@@ -173,6 +176,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 		}
 
 		_parseTime = sw.Elapsed;
+		_mayHaveDuplicateKeys = JsonObjectReader.MayContainDuplicateKeys(JsonMarshal.GetRawUtf8Value(_document.RootElement));
 		logger.LogDebug("Parsed JSON stream: {Size}, {ParseTime}ms", FormatBytes(DocumentSizeBytes),
 			_parseTime.TotalMilliseconds);
 	}
@@ -192,7 +196,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 		}
 
 		JsonElement element = NavigateToElement(jsonPointer);
-		return JsonNode.Parse(element.GetRawText());
+		return JsonObjectReader.ToMutableNode(element.Clone());
 	}
 
 	/// <summary>
@@ -210,13 +214,8 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			throw new InvalidOperationException("No document is loaded.");
 		}
 
-		if (string.IsNullOrEmpty(jsonPointer) || jsonPointer == "/")
-		{
-			return _document.RootElement;
-		}
-
 		JsonElement current = _document.RootElement;
-		string[] segments = jsonPointer.Split('/', StringSplitOptions.RemoveEmptyEntries);
+		string[] segments = JsonPointerHelper.Split(jsonPointer);
 
 		foreach (string segment in segments)
 		{
@@ -266,29 +265,37 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			throw new InvalidOperationException("No document is loaded.");
 		}
 
-		if (string.IsNullOrEmpty(jsonPointer) || jsonPointer == "/")
+		if (string.IsNullOrEmpty(jsonPointer))
 		{
 			// Replacing root
 			return jsonLiteral;
 		}
 
-		var root = JsonNode.Parse(_document.RootElement.GetRawText());
-		JsonNode? target = NavigateJsonNode(root, jsonPointer);
-		JsonNode? parent = target?.Parent;
+		JsonNode? root = JsonObjectReader.ToMutableNode(_document.RootElement);
 		var newValue = JsonNode.Parse(jsonLiteral);
 
-		if (parent is JsonObject parentObj)
+		// Resolve through the parent: a JSON null target is a C# null node, so target.Parent can't be used.
+		switch (NavigateJsonNode(root, ParentPointer(jsonPointer)))
 		{
-			string key = GetLastSegment(jsonPointer);
-			parentObj[key] = newValue;
-		}
-		else if (parent is JsonArray parentArr)
-		{
-			int index = int.Parse(GetLastSegment(jsonPointer), CultureInfo.InvariantCulture);
-			parentArr[index] = newValue;
+			case JsonObject parentObj:
+				string key = JsonPointerHelper.UnescapeSegment(GetLastSegment(jsonPointer));
+				if (!parentObj.ContainsKey(key))
+				{
+					throw new KeyNotFoundException($"Property '{key}' not found at path '{jsonPointer}'.");
+				}
+
+				parentObj[key] = newValue;
+				break;
+
+			case JsonArray parentArr:
+				parentArr[ParseIndex(GetLastSegment(jsonPointer), parentArr.Count, jsonPointer)] = newValue;
+				break;
+
+			default:
+				throw new KeyNotFoundException($"Cannot navigate to '{jsonPointer}'.");
 		}
 
-		return root?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? jsonLiteral;
+		return root?.ToJsonString(JsonFormatting.IndentedSerializer) ?? jsonLiteral;
 	}
 
 	/// <summary>
@@ -302,16 +309,8 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			throw new InvalidOperationException("No document is loaded.");
 		}
 
-		string parentPath = jsonPointer[..jsonPointer.LastIndexOf('/')];
-		if (string.IsNullOrEmpty(parentPath))
-		{
-			parentPath = "";
-		}
-
-		var root = JsonNode.Parse(_document.RootElement.GetRawText());
-		JsonNode? parentNode = string.IsNullOrEmpty(parentPath)
-			? root
-			: NavigateJsonNode(root, parentPath);
+		JsonNode? root = JsonObjectReader.ToMutableNode(_document.RootElement);
+		JsonNode? parentNode = NavigateJsonNode(root, ParentPointer(jsonPointer));
 
 		if (parentNode is not JsonObject parentObj)
 		{
@@ -319,6 +318,11 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 		}
 
 		string oldKey = JsonPointerHelper.UnescapeSegment(GetLastSegment(jsonPointer));
+		string? keyError = JsonEditValidator.ValidatePropertyName(newKeyName, parentObj, oldKey);
+		if (keyError is not null)
+		{
+			throw new InvalidOperationException(keyError);
+		}
 
 		// Preserve insertion order by rebuilding
 		var entries = new List<KeyValuePair<string, JsonNode?>>();
@@ -340,7 +344,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			parentObj[entry.Key] = entry.Value;
 		}
 
-		return root?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
+		return root?.ToJsonString(JsonFormatting.IndentedSerializer) ?? "";
 	}
 
 	/// <summary>
@@ -354,35 +358,29 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			throw new InvalidOperationException("No document is loaded.");
 		}
 
-		if (string.IsNullOrEmpty(jsonPointer) || jsonPointer == "/")
+		if (string.IsNullOrEmpty(jsonPointer))
 		{
 			throw new InvalidOperationException("Cannot remove root node.");
 		}
 
-		string parentPath = jsonPointer[..jsonPointer.LastIndexOf('/')];
-		if (string.IsNullOrEmpty(parentPath))
-		{
-			parentPath = "";
-		}
-
-		var root = JsonNode.Parse(_document.RootElement.GetRawText());
-		JsonNode? parentNode = string.IsNullOrEmpty(parentPath)
-			? root
-			: NavigateJsonNode(root, parentPath);
+		JsonNode? root = JsonObjectReader.ToMutableNode(_document.RootElement);
+		JsonNode? parentNode = NavigateJsonNode(root, ParentPointer(jsonPointer));
 
 		string lastSegment = JsonPointerHelper.UnescapeSegment(GetLastSegment(jsonPointer));
 
 		if (parentNode is JsonObject parentObj)
 		{
-			parentObj.Remove(lastSegment);
+			if (!parentObj.Remove(lastSegment))
+			{
+				throw new KeyNotFoundException($"Property '{lastSegment}' not found at path '{jsonPointer}'.");
+			}
 		}
 		else if (parentNode is JsonArray parentArr)
 		{
-			int index = int.Parse(lastSegment, CultureInfo.InvariantCulture);
-			parentArr.RemoveAt(index);
+			parentArr.RemoveAt(ParseIndex(lastSegment, parentArr.Count, jsonPointer));
 		}
 
-		return root?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
+		return root?.ToJsonString(JsonFormatting.IndentedSerializer) ?? "";
 	}
 
 	/// <summary>
@@ -396,10 +394,8 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			throw new InvalidOperationException("No document is loaded.");
 		}
 
-		var root = JsonNode.Parse(_document.RootElement.GetRawText());
-		JsonNode? parentNode = string.IsNullOrEmpty(parentPath)
-			? root
-			: NavigateJsonNode(root, parentPath);
+		JsonNode? root = JsonObjectReader.ToMutableNode(_document.RootElement);
+		JsonNode? parentNode = NavigateJsonNode(root, parentPath);
 		var newValue = JsonNode.Parse(valueJson);
 
 		if (parentNode is JsonObject parentObj)
@@ -412,7 +408,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			parentArr.Add(newValue);
 		}
 
-		return root?.ToJsonString(new JsonSerializerOptions { WriteIndented = true }) ?? "";
+		return root?.ToJsonString(JsonFormatting.IndentedSerializer) ?? "";
 	}
 
 	/// <summary>
@@ -426,7 +422,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			return 0;
 		}
 
-		return CountNodes(_document.RootElement);
+		return CountNodes(_document.RootElement, _mayHaveDuplicateKeys);
 	}
 
 	/// <summary>
@@ -440,7 +436,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			return 0;
 		}
 
-		return GetMaxDepth(_document.RootElement, 0);
+		return GetMaxDepth(_document.RootElement, 0, _mayHaveDuplicateKeys);
 	}
 
 	/// <summary>
@@ -455,7 +451,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			return string.Empty;
 		}
 
-		var options = new JsonWriterOptions { Indented = indented };
+		JsonWriterOptions options = JsonFormatting.Writer(indented);
 		using var stream = new MemoryStream();
 		using var writer = new Utf8JsonWriter(stream, options);
 		_document.RootElement.WriteTo(writer);
@@ -468,51 +464,30 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 	#region IJsonDocumentSource
 
 	/// <inheritdoc />
-	public int GetChildCount(string path)
-	{
-		JsonElement element = string.IsNullOrEmpty(path) || path == "/"
-			? RootElement
-			: NavigateToElement(path);
-
-		return element.ValueKind switch
-		{
-			JsonValueKind.Object => CountObjectProperties(element),
-			JsonValueKind.Array => element.GetArrayLength(),
-			_ => 0
-		};
-	}
+	public int GetChildCount(string path) =>
+		JsonObjectReader.CountChildren(NavigateToElement(path), _mayHaveDuplicateKeys);
 
 	/// <inheritdoc />
 	public IEnumerable<JsonChildDescriptor> EnumerateChildren(string path)
 	{
-		JsonElement element = string.IsNullOrEmpty(path) || path == "/"
-			? RootElement
-			: NavigateToElement(path);
+		JsonElement element = NavigateToElement(path);
 
 		if (element.ValueKind == JsonValueKind.Object)
 		{
-			foreach (JsonProperty prop in element.EnumerateObject())
+			foreach (KeyValuePair<string, JsonElement> prop in EnumerateProperties(element))
 			{
-				string childPath = string.IsNullOrEmpty(path) || path == "/"
-					? $"/{JsonPointerHelper.EscapeSegment(prop.Name)}"
-					: $"{path}/{JsonPointerHelper.EscapeSegment(prop.Name)}";
-
-				int childCount = prop.Value.ValueKind switch
-				{
-					JsonValueKind.Object => CountObjectProperties(prop.Value),
-					JsonValueKind.Array => prop.Value.GetArrayLength(),
-					_ => 0
-				};
+				string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Key)}";
+				JsonElement value = prop.Value;
 
 				yield return new JsonChildDescriptor(
 					childPath,
-					prop.Name,
+					prop.Key,
 					null,
-					prop.Value.ValueKind,
-					prop.Value.ValueKind is JsonValueKind.Object or JsonValueKind.Array
+					value.ValueKind,
+					value.ValueKind is JsonValueKind.Object or JsonValueKind.Array
 						? null
-						: GetPrimitiveRawValue(prop.Value),
-					childCount);
+						: GetPrimitiveRawValue(value),
+					JsonObjectReader.CountChildren(value, _mayHaveDuplicateKeys));
 			}
 		}
 		else if (element.ValueKind == JsonValueKind.Array)
@@ -520,16 +495,8 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			int i = 0;
 			foreach (JsonElement item in element.EnumerateArray())
 			{
-				string childPath = string.IsNullOrEmpty(path) || path == "/"
-					? $"/{i}"
-					: $"{path}/{i}";
-
-				int childCount = item.ValueKind switch
-				{
-					JsonValueKind.Object => CountObjectProperties(item),
-					JsonValueKind.Array => item.GetArrayLength(),
-					_ => 0
-				};
+				string childPath = $"{path}/{i}";
+				int childCount = JsonObjectReader.CountChildren(item, _mayHaveDuplicateKeys);
 
 				yield return new JsonChildDescriptor(
 					childPath,
@@ -548,9 +515,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 	/// <inheritdoc />
 	public string? GetRawValue(string path)
 	{
-		JsonElement element = string.IsNullOrEmpty(path) || path == "/"
-			? RootElement
-			: NavigateToElement(path);
+		JsonElement element = NavigateToElement(path);
 
 		return element.ValueKind is JsonValueKind.Object or JsonValueKind.Array
 			? null
@@ -558,14 +523,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 	}
 
 	/// <inheritdoc />
-	public JsonValueKind GetValueKind(string path)
-	{
-		JsonElement element = string.IsNullOrEmpty(path) || path == "/"
-			? RootElement
-			: NavigateToElement(path);
-
-		return element.ValueKind;
-	}
+	public JsonValueKind GetValueKind(string path) => NavigateToElement(path).ValueKind;
 
 	/// <inheritdoc />
 	public JsonElement GetElement(string path) => NavigateToElement(path);
@@ -604,15 +562,22 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 		}
 	}
 
-	private static int CountObjectProperties(JsonElement element)
+	private IEnumerable<KeyValuePair<string, JsonElement>> EnumerateProperties(JsonElement obj)
 	{
-		int count = 0;
-		foreach (JsonProperty _ in element.EnumerateObject())
+		if (_mayHaveDuplicateKeys)
 		{
-			count++;
+			return JsonObjectReader.GetProperties(obj);
 		}
 
-		return count;
+		return EnumerateRaw(obj);
+
+		static IEnumerable<KeyValuePair<string, JsonElement>> EnumerateRaw(JsonElement element)
+		{
+			foreach (JsonProperty prop in element.EnumerateObject())
+			{
+				yield return new KeyValuePair<string, JsonElement>(prop.Name, prop.Value);
+			}
+		}
 	}
 
 	private static string? GetPrimitiveRawValue(JsonElement element)
@@ -628,22 +593,29 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 		};
 	}
 
-	private static int CountNodes(JsonElement element)
+	private static int CountNodes(JsonElement element, bool dedupe)
 	{
 		int count = 1;
 		switch (element.ValueKind)
 		{
+			case JsonValueKind.Object when dedupe:
+				foreach (KeyValuePair<string, JsonElement> prop in JsonObjectReader.GetProperties(element))
+				{
+					count += CountNodes(prop.Value, dedupe);
+				}
+
+				break;
 			case JsonValueKind.Object:
 				foreach (JsonProperty prop in element.EnumerateObject())
 				{
-					count += CountNodes(prop.Value);
+					count += CountNodes(prop.Value, dedupe);
 				}
 
 				break;
 			case JsonValueKind.Array:
 				foreach (JsonElement item in element.EnumerateArray())
 				{
-					count += CountNodes(item);
+					count += CountNodes(item, dedupe);
 				}
 
 				break;
@@ -652,22 +624,29 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 		return count;
 	}
 
-	private static int GetMaxDepth(JsonElement element, int currentDepth)
+	private static int GetMaxDepth(JsonElement element, int currentDepth, bool dedupe)
 	{
 		int maxDepth = currentDepth;
 		switch (element.ValueKind)
 		{
+			case JsonValueKind.Object when dedupe:
+				foreach (KeyValuePair<string, JsonElement> prop in JsonObjectReader.GetProperties(element))
+				{
+					maxDepth = Math.Max(maxDepth, GetMaxDepth(prop.Value, currentDepth + 1, dedupe));
+				}
+
+				break;
 			case JsonValueKind.Object:
 				foreach (JsonProperty prop in element.EnumerateObject())
 				{
-					maxDepth = Math.Max(maxDepth, GetMaxDepth(prop.Value, currentDepth + 1));
+					maxDepth = Math.Max(maxDepth, GetMaxDepth(prop.Value, currentDepth + 1, dedupe));
 				}
 
 				break;
 			case JsonValueKind.Array:
 				foreach (JsonElement item in element.EnumerateArray())
 				{
-					maxDepth = Math.Max(maxDepth, GetMaxDepth(item, currentDepth + 1));
+					maxDepth = Math.Max(maxDepth, GetMaxDepth(item, currentDepth + 1, dedupe));
 				}
 
 				break;
@@ -734,37 +713,41 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 
 	private static JsonNode? NavigateJsonNode(JsonNode? root, string jsonPointer)
 	{
-		if (root is null)
-		{
-			throw new InvalidOperationException("Root node is null.");
-		}
-
-		if (string.IsNullOrEmpty(jsonPointer) || jsonPointer == "/")
-		{
-			return root;
-		}
-
 		JsonNode? current = root;
-		string[] segments = jsonPointer.Split('/', StringSplitOptions.RemoveEmptyEntries);
-
-		foreach (string segment in segments)
+		foreach (string segment in JsonPointerHelper.Split(jsonPointer))
 		{
 			string unescaped = JsonPointerHelper.UnescapeSegment(segment);
-			if (current is JsonObject obj)
+			switch (current)
 			{
-				current = obj[unescaped];
-			}
-			else if (current is JsonArray arr && int.TryParse(unescaped, out int idx))
-			{
-				current = arr[idx];
-			}
-			else
-			{
-				throw new KeyNotFoundException($"Cannot navigate to '{jsonPointer}'.");
+				case JsonObject obj when obj.TryGetPropertyValue(unescaped, out JsonNode? next):
+					current = next;
+					break;
+				case JsonArray arr:
+					current = arr[ParseIndex(unescaped, arr.Count, jsonPointer)];
+					break;
+				default:
+					throw new KeyNotFoundException($"Cannot navigate to '{jsonPointer}'.");
 			}
 		}
 
 		return current;
+	}
+
+	private static string ParentPointer(string jsonPointer)
+	{
+		int slash = jsonPointer.LastIndexOf('/');
+		return slash > 0 ? jsonPointer[..slash] : "";
+	}
+
+	private static int ParseIndex(string segment, int count, string jsonPointer)
+	{
+		if (!int.TryParse(segment, NumberStyles.None, CultureInfo.InvariantCulture, out int index) ||
+		    index >= count)
+		{
+			throw new KeyNotFoundException($"Invalid array index '{segment}' at path '{jsonPointer}'.");
+		}
+
+		return index;
 	}
 
 	private static string GetLastSegment(string jsonPointer)

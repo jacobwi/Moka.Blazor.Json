@@ -2,18 +2,21 @@ namespace Moka.Blazor.Json.Services;
 
 /// <summary>
 ///     A simple LRU (Least Recently Used) cache with a fixed capacity.
-///     Evicted values are disposed if they implement <see cref="IDisposable" />.
+///     Evicted values are disposed if they implement <see cref="IDisposable" />, unless
+///     <c>disposeOnEvict</c> is false.
 /// </summary>
 internal sealed class LruCache<TKey, TValue> where TKey : notnull
 {
 	private readonly int _capacity;
+	private readonly bool _disposeOnEvict;
 	private readonly LinkedList<(TKey Key, TValue Value)> _list = [];
 	private readonly Dictionary<TKey, LinkedListNode<(TKey Key, TValue Value)>> _map;
 
-	public LruCache(int capacity)
+	public LruCache(int capacity, bool disposeOnEvict = true)
 	{
 		ArgumentOutOfRangeException.ThrowIfLessThan(capacity, 1);
 		_capacity = capacity;
+		_disposeOnEvict = disposeOnEvict;
 		_map = new Dictionary<TKey, LinkedListNode<(TKey Key, TValue Value)>>(capacity);
 	}
 
@@ -47,14 +50,16 @@ internal sealed class LruCache<TKey, TValue> where TKey : notnull
 			return;
 		}
 
-		// Evict if at capacity — dispose the evicted value since no callers hold references
-		// to values they haven't already retrieved via TryGet.
 		if (_map.Count >= _capacity)
 		{
 			LinkedListNode<(TKey Key, TValue Value)>? last = _list.Last;
 			if (last is not null)
 			{
-				DisposeValue(last.Value.Value);
+				if (_disposeOnEvict)
+				{
+					DisposeValue(last.Value.Value);
+				}
+
 				_list.RemoveLast();
 				_map.Remove(last.Value.Key);
 			}

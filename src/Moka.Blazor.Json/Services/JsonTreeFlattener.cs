@@ -10,20 +10,32 @@ namespace Moka.Blazor.Json.Services;
 /// </summary>
 internal sealed class JsonTreeFlattener
 {
-	#region Properties
+	#region Fields
 
-	/// <summary>
-	///     Gets the set of currently expanded paths, for external inspection.
-	/// </summary>
-	public IReadOnlySet<string> ExpandedPaths => _expandedPaths;
+	// Flatten and ExpandAll run on background threads while UI event handlers mutate
+	// expand/search state; HashSet is not safe for a concurrent reader and writer.
+	private readonly Lock _gate = new();
+	private readonly HashSet<string> _expandedPaths = new(StringComparer.Ordinal);
+	private HashSet<string> _searchMatchPaths = new(StringComparer.Ordinal);
+	private string? _activeSearchMatchPath;
 
 	#endregion
 
-	#region Fields
+	#region Properties
 
-	private readonly HashSet<string> _expandedPaths = [];
-	private readonly HashSet<string> _searchMatchPaths = [];
-	private string? _activeSearchMatchPath;
+	/// <summary>
+	///     Gets a snapshot of the currently expanded paths.
+	/// </summary>
+	public IReadOnlySet<string> ExpandedPaths
+	{
+		get
+		{
+			lock (_gate)
+			{
+				return new HashSet<string>(_expandedPaths, StringComparer.Ordinal);
+			}
+		}
+	}
 
 	#endregion
 
@@ -36,10 +48,13 @@ internal sealed class JsonTreeFlattener
 	/// <param name="maxDepth">Max depth to expand (-1 for all).</param>
 	public void ExpandToDepth(JsonElement root, int maxDepth)
 	{
-		_expandedPaths.Clear();
-		if (maxDepth != 0)
+		lock (_gate)
 		{
-			ExpandToDepthRecursive(root, "", 0, maxDepth);
+			_expandedPaths.Clear();
+			if (maxDepth != 0)
+			{
+				ExpandToDepthRecursive(root, "", 0, maxDepth);
+			}
 		}
 	}
 
@@ -50,29 +65,93 @@ internal sealed class JsonTreeFlattener
 	/// <returns><c>true</c> if the node is now expanded; <c>false</c> if collapsed.</returns>
 	public bool ToggleExpand(string path)
 	{
-		if (!_expandedPaths.Remove(path))
+		lock (_gate)
 		{
-			_expandedPaths.Add(path);
-			return true;
-		}
+			if (!_expandedPaths.Remove(path))
+			{
+				_expandedPaths.Add(path);
+				return true;
+			}
 
-		return false;
+			return false;
+		}
 	}
 
 	/// <summary>
 	///     Expands a specific path.
 	/// </summary>
-	public void Expand(string path) => _expandedPaths.Add(path);
+	public void Expand(string path)
+	{
+		lock (_gate)
+		{
+			_expandedPaths.Add(path);
+		}
+	}
+
+	/// <summary>
+	///     Expands the root and every ancestor of <paramref name="path" /> so the node becomes visible.
+	///     The node itself is left as it is.
+	/// </summary>
+	public void ExpandAncestors(string path)
+	{
+		lock (_gate)
+		{
+			_expandedPaths.Add("");
+
+			int slash = path.Length > 1 ? path.IndexOf('/', 1) : -1;
+			while (slash > 0)
+			{
+				_expandedPaths.Add(path[..slash]);
+				slash = path.IndexOf('/', slash + 1);
+			}
+		}
+	}
 
 	/// <summary>
 	///     Collapses a specific path.
 	/// </summary>
-	public void Collapse(string path) => _expandedPaths.Remove(path);
+	public void Collapse(string path)
+	{
+		lock (_gate)
+		{
+			_expandedPaths.Remove(path);
+		}
+	}
+
+	/// <summary>
+	///     Collapses a path and every expanded descendant of it.
+	/// </summary>
+	public void CollapseSubtree(string path)
+	{
+		string prefix = path + "/";
+		lock (_gate)
+		{
+			_expandedPaths.RemoveWhere(p => p == path || p.StartsWith(prefix, StringComparison.Ordinal));
+		}
+	}
 
 	/// <summary>
 	///     Collapses all nodes.
 	/// </summary>
-	public void CollapseAll() => _expandedPaths.Clear();
+	public void CollapseAll()
+	{
+		lock (_gate)
+		{
+			_expandedPaths.Clear();
+		}
+	}
+
+	/// <summary>
+	///     Replaces the expanded set, e.g. to keep the user's view after the document is re-parsed.
+	/// </summary>
+	public void RestoreExpandedPaths(IEnumerable<string> paths)
+	{
+		lock (_gate)
+		{
+			_expandedPaths.Clear();
+			_expandedPaths.UnionWith(paths);
+		}
+	}
 
 	/// <summary>
 	///     Expands all nodes in the document.
@@ -85,10 +164,13 @@ internal sealed class JsonTreeFlattener
 	/// </summary>
 	public void ExpandToDepth(IJsonDocumentSource source, int maxDepth)
 	{
-		_expandedPaths.Clear();
-		if (maxDepth != 0)
+		lock (_gate)
 		{
-			ExpandToDepthRecursive(source, "", 0, maxDepth);
+			_expandedPaths.Clear();
+			if (maxDepth != 0)
+			{
+				ExpandToDepthRecursive(source, "", 0, maxDepth);
+			}
 		}
 	}
 
@@ -96,6 +178,17 @@ internal sealed class JsonTreeFlattener
 	///     Expands all nodes using an <see cref="IJsonDocumentSource" />.
 	/// </summary>
 	public void ExpandAll(IJsonDocumentSource source) => ExpandToDepth(source, -1);
+
+	/// <summary>
+	///     Expands the container at <paramref name="path" /> and every container below it.
+	/// </summary>
+	public void ExpandSubtree(IJsonDocumentSource source, string path)
+	{
+		lock (_gate)
+		{
+			ExpandToDepthRecursive(source, path, 0, -1);
+		}
+	}
 
 	#endregion
 
@@ -108,13 +201,23 @@ internal sealed class JsonTreeFlattener
 	/// <param name="activeMatchPath">The currently active (focused) match path.</param>
 	public void SetSearchMatches(IEnumerable<string> matchPaths, string? activeMatchPath)
 	{
-		_searchMatchPaths.Clear();
-		foreach (string path in matchPaths)
+		var matches = new HashSet<string>(matchPaths, StringComparer.Ordinal);
+		lock (_gate)
 		{
-			_searchMatchPaths.Add(path);
+			_searchMatchPaths = matches;
+			_activeSearchMatchPath = activeMatchPath;
 		}
+	}
 
-		_activeSearchMatchPath = activeMatchPath;
+	/// <summary>
+	///     Changes only the active match, keeping the existing match set.
+	/// </summary>
+	public void SetActiveSearchMatch(string? activeMatchPath)
+	{
+		lock (_gate)
+		{
+			_activeSearchMatchPath = activeMatchPath;
+		}
 	}
 
 	/// <summary>
@@ -122,8 +225,11 @@ internal sealed class JsonTreeFlattener
 	/// </summary>
 	public void ClearSearchMatches()
 	{
-		_searchMatchPaths.Clear();
-		_activeSearchMatchPath = null;
+		lock (_gate)
+		{
+			_searchMatchPaths = new HashSet<string>(StringComparer.Ordinal);
+			_activeSearchMatchPath = null;
+		}
 	}
 
 	#endregion
@@ -140,7 +246,11 @@ internal sealed class JsonTreeFlattener
 	{
 		int nextId = 0;
 		var result = new List<FlattenedJsonNode>();
-		FlattenElement(ref nextId, root, "", null, 0, false, result);
+		lock (_gate)
+		{
+			FlattenElement(ref nextId, root, "", null, 0, false, result);
+		}
+
 		return result;
 	}
 
@@ -155,7 +265,11 @@ internal sealed class JsonTreeFlattener
 	{
 		int nextId = 0;
 		var result = new List<FlattenedJsonNode>();
-		FlattenElement(ref nextId, scopedRoot, scopedPath, null, 0, false, result);
+		lock (_gate)
+		{
+			FlattenElement(ref nextId, scopedRoot, scopedPath, null, 0, false, result);
+		}
+
 		return result;
 	}
 
@@ -167,8 +281,12 @@ internal sealed class JsonTreeFlattener
 	{
 		int nextId = 0;
 		var result = new List<FlattenedJsonNode>();
-		FlattenFromSource(ref nextId, source, "", null, null, source.RootValueKind, null,
-			source.GetChildCount(""), 0, false, result);
+		lock (_gate)
+		{
+			FlattenFromSource(ref nextId, source, "", null, null, source.RootValueKind, null,
+				source.GetChildCount(""), 0, false, result);
+		}
+
 		return result;
 	}
 
@@ -181,7 +299,11 @@ internal sealed class JsonTreeFlattener
 		var result = new List<FlattenedJsonNode>();
 		JsonValueKind kind = source.GetValueKind(scopedPath);
 		int childCount = source.GetChildCount(scopedPath);
-		FlattenFromSource(ref nextId, source, scopedPath, null, null, kind, null, childCount, 0, false, result);
+		lock (_gate)
+		{
+			FlattenFromSource(ref nextId, source, scopedPath, null, null, kind, null, childCount, 0, false, result);
+		}
+
 		return result;
 	}
 
@@ -230,11 +352,11 @@ internal sealed class JsonTreeFlattener
 		if (element.ValueKind == JsonValueKind.Object)
 		{
 			int i = 0;
-			foreach (JsonProperty prop in element.EnumerateObject())
+			foreach (KeyValuePair<string, JsonElement> prop in JsonObjectReader.GetProperties(element))
 			{
-				string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Name)}";
+				string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Key)}";
 				bool isLast = i == childCount - 1;
-				FlattenElement(ref nextId, prop.Value, childPath, prop.Name, depth + 1, !isLast, result);
+				FlattenElement(ref nextId, prop.Value, childPath, prop.Key, depth + 1, !isLast, result);
 				i++;
 			}
 		}
@@ -271,25 +393,7 @@ internal sealed class JsonTreeFlattener
 		});
 	}
 
-	private static int GetChildCount(JsonElement element)
-	{
-		if (element.ValueKind == JsonValueKind.Object)
-		{
-			int count = 0;
-			foreach (JsonProperty _ in element.EnumerateObject())
-			{
-				count++;
-			}
-
-			return count;
-		}
-
-		return element.ValueKind switch
-		{
-			JsonValueKind.Array => element.GetArrayLength(),
-			_ => 0
-		};
-	}
+	private static int GetChildCount(JsonElement element) => JsonObjectReader.CountChildren(element, true);
 
 	private static string? GetRawValue(JsonElement element)
 	{
@@ -320,9 +424,9 @@ internal sealed class JsonTreeFlattener
 
 		if (element.ValueKind == JsonValueKind.Object)
 		{
-			foreach (JsonProperty prop in element.EnumerateObject())
+			foreach (KeyValuePair<string, JsonElement> prop in JsonObjectReader.GetProperties(element))
 			{
-				string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Name)}";
+				string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Key)}";
 				ExpandToDepthRecursive(prop.Value, childPath, currentDepth + 1, maxDepth);
 			}
 		}

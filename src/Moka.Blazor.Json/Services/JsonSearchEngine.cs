@@ -10,16 +10,42 @@ namespace Moka.Blazor.Json.Services;
 ///     Provides search functionality across a JSON document, supporting
 ///     plain text, regex, and JSON Path queries.
 /// </summary>
+/// <remarks>
+///     <see cref="FindMatches" /> is safe to run on a background thread: it builds a new result list and
+///     touches no navigation state. Apply the result on the UI thread with <see cref="SetMatches" />.
+/// </remarks>
 internal sealed class JsonSearchEngine
 {
+	#region Nested Types
+
+	private sealed record RegexCacheEntry(string Pattern, RegexOptions Options, Regex Regex);
+
+	private sealed class TextMatcher(string query, StringComparison comparison, Regex? regex)
+	{
+		public bool IsMatch(string text) => regex?.IsMatch(text) ?? text.Contains(query, comparison);
+	}
+
+	private sealed class MatchCollector
+	{
+		private readonly HashSet<string> _seen = new(StringComparer.Ordinal);
+
+		public List<string> Paths { get; } = [];
+
+		public void Add(string path)
+		{
+			if (_seen.Add(path))
+			{
+				Paths.Add(path);
+			}
+		}
+	}
+
+	#endregion
+
 	#region Fields
 
-	private readonly List<string> _matchPaths = [];
-	private readonly HashSet<string> _matchPathSet = [];
-
-	private string? _cachedRegexPattern;
-	private RegexOptions _cachedRegexOptions;
-	private Regex? _cachedRegex;
+	private IReadOnlyList<string> _matchPaths = [];
+	private RegexCacheEntry? _regexCache;
 
 	#endregion
 
@@ -38,9 +64,15 @@ internal sealed class JsonSearchEngine
 	/// <summary>
 	///     Gets the path of the currently active match, or null.
 	/// </summary>
-	public string? ActiveMatchPath => ActiveMatchIndex >= 0 && ActiveMatchIndex < _matchPaths.Count
-		? _matchPaths[ActiveMatchIndex]
-		: null;
+	public string? ActiveMatchPath
+	{
+		get
+		{
+			IReadOnlyList<string> matches = _matchPaths;
+			int index = ActiveMatchIndex;
+			return index >= 0 && index < matches.Count ? matches[index] : null;
+		}
+	}
 
 	/// <summary>
 	///     Gets the total number of matches found.
@@ -62,56 +94,68 @@ internal sealed class JsonSearchEngine
 	public int Search(JsonElement root, string query, JsonSearchOptions? options = null,
 		CancellationToken cancellationToken = default)
 	{
-		_matchPaths.Clear();
-		_matchPathSet.Clear();
-		ActiveMatchIndex = -1;
+		Clear();
+		options ??= new JsonSearchOptions();
 
-		if (string.IsNullOrEmpty(query))
+		if (string.IsNullOrEmpty(query) || !TryCreateMatcher(query, options, out TextMatcher? matcher))
 		{
 			return 0;
 		}
 
+		var collector = new MatchCollector();
+		try
+		{
+			SearchElement(root, "", matcher, options, collector, cancellationToken);
+		}
+		catch (RegexMatchTimeoutException)
+		{
+			return 0;
+		}
+
+		return SetMatches(collector.Paths);
+	}
+
+	/// <summary>
+	///     Executes a search across the document via an <see cref="IJsonDocumentSource" />.
+	/// </summary>
+	public int Search(IJsonDocumentSource source, string query, JsonSearchOptions? options = null,
+		CancellationToken cancellationToken = default) =>
+		SetMatches(FindMatches(source, "", query, options, cancellationToken));
+
+	/// <summary>
+	///     Finds all matches under <paramref name="rootPath" /> without changing the engine's current results.
+	/// </summary>
+	public IReadOnlyList<string> FindMatches(IJsonDocumentSource source, string rootPath, string query,
+		JsonSearchOptions? options = null, CancellationToken cancellationToken = default)
+	{
 		options ??= new JsonSearchOptions();
 
-		if (options.UseRegex)
+		if (string.IsNullOrEmpty(query) || !TryCreateMatcher(query, options, out TextMatcher? matcher))
 		{
-			RegexOptions regexOptions = RegexOptions.Compiled;
-			if (!options.CaseSensitive)
-			{
-				regexOptions |= RegexOptions.IgnoreCase;
-			}
-
-			// Cache compiled regex — reuse if pattern and options haven't changed
-			if (_cachedRegex is null || _cachedRegexPattern != query || _cachedRegexOptions != regexOptions)
-			{
-				try
-				{
-					_cachedRegex = new Regex(query, regexOptions, TimeSpan.FromSeconds(1));
-					_cachedRegexPattern = query;
-					_cachedRegexOptions = regexOptions;
-				}
-				catch (RegexParseException)
-				{
-					return 0;
-				}
-			}
-
-			SearchWithRegex(root, "", _cachedRegex, options, cancellationToken);
-		}
-		else
-		{
-			StringComparison comparison = options.CaseSensitive
-				? StringComparison.Ordinal
-				: StringComparison.OrdinalIgnoreCase;
-			SearchPlainText(root, "", query, comparison, options, cancellationToken);
+			return [];
 		}
 
-		if (_matchPaths.Count > 0)
+		var collector = new MatchCollector();
+		try
 		{
-			ActiveMatchIndex = 0;
+			SearchSource(source, rootPath, matcher, options, collector, cancellationToken);
+		}
+		catch (RegexMatchTimeoutException)
+		{
+			return [];
 		}
 
-		return _matchPaths.Count;
+		return collector.Paths;
+	}
+
+	/// <summary>
+	///     Replaces the current results and makes the first match active.
+	/// </summary>
+	public int SetMatches(IReadOnlyList<string> matchPaths)
+	{
+		_matchPaths = matchPaths;
+		ActiveMatchIndex = matchPaths.Count > 0 ? 0 : -1;
+		return matchPaths.Count;
 	}
 
 	/// <summary>
@@ -119,13 +163,14 @@ internal sealed class JsonSearchEngine
 	/// </summary>
 	public string? NextMatch()
 	{
-		if (_matchPaths.Count == 0)
+		IReadOnlyList<string> matches = _matchPaths;
+		if (matches.Count == 0)
 		{
 			return null;
 		}
 
-		ActiveMatchIndex = (ActiveMatchIndex + 1) % _matchPaths.Count;
-		return _matchPaths[ActiveMatchIndex];
+		ActiveMatchIndex = (ActiveMatchIndex + 1) % matches.Count;
+		return matches[ActiveMatchIndex];
 	}
 
 	/// <summary>
@@ -133,13 +178,14 @@ internal sealed class JsonSearchEngine
 	/// </summary>
 	public string? PreviousMatch()
 	{
-		if (_matchPaths.Count == 0)
+		IReadOnlyList<string> matches = _matchPaths;
+		if (matches.Count == 0)
 		{
 			return null;
 		}
 
-		ActiveMatchIndex = (ActiveMatchIndex - 1 + _matchPaths.Count) % _matchPaths.Count;
-		return _matchPaths[ActiveMatchIndex];
+		ActiveMatchIndex = (ActiveMatchIndex - 1 + matches.Count) % matches.Count;
+		return matches[ActiveMatchIndex];
 	}
 
 	/// <summary>
@@ -147,66 +193,8 @@ internal sealed class JsonSearchEngine
 	/// </summary>
 	public void Clear()
 	{
-		_matchPaths.Clear();
-		_matchPathSet.Clear();
+		_matchPaths = [];
 		ActiveMatchIndex = -1;
-	}
-
-	/// <summary>
-	///     Executes a search across the document via an <see cref="IJsonDocumentSource" />.
-	/// </summary>
-	public int Search(IJsonDocumentSource source, string query, JsonSearchOptions? options = null,
-		CancellationToken cancellationToken = default)
-	{
-		_matchPaths.Clear();
-		_matchPathSet.Clear();
-		ActiveMatchIndex = -1;
-
-		if (string.IsNullOrEmpty(query))
-		{
-			return 0;
-		}
-
-		options ??= new JsonSearchOptions();
-
-		if (options.UseRegex)
-		{
-			RegexOptions regexOptions = RegexOptions.Compiled;
-			if (!options.CaseSensitive)
-			{
-				regexOptions |= RegexOptions.IgnoreCase;
-			}
-
-			if (_cachedRegex is null || _cachedRegexPattern != query || _cachedRegexOptions != regexOptions)
-			{
-				try
-				{
-					_cachedRegex = new Regex(query, regexOptions, TimeSpan.FromSeconds(1));
-					_cachedRegexPattern = query;
-					_cachedRegexOptions = regexOptions;
-				}
-				catch (RegexParseException)
-				{
-					return 0;
-				}
-			}
-
-			SearchWithRegex(source, "", _cachedRegex, options, cancellationToken);
-		}
-		else
-		{
-			StringComparison comparison = options.CaseSensitive
-				? StringComparison.Ordinal
-				: StringComparison.OrdinalIgnoreCase;
-			SearchPlainText(source, "", query, comparison, options, cancellationToken);
-		}
-
-		if (_matchPaths.Count > 0)
-		{
-			ActiveMatchIndex = 0;
-		}
-
-		return _matchPaths.Count;
 	}
 
 	/// <summary>
@@ -220,9 +208,7 @@ internal sealed class JsonSearchEngine
 		IProgress<StreamingJsonSearcher.SearchProgress>? progress = null,
 		CancellationToken cancellationToken = default)
 	{
-		_matchPaths.Clear();
-		_matchPathSet.Clear();
-		ActiveMatchIndex = -1;
+		Clear();
 
 		if (string.IsNullOrEmpty(query))
 		{
@@ -232,32 +218,66 @@ internal sealed class JsonSearchEngine
 		List<string> results = await StreamingJsonSearcher.SearchAsync(
 			jsonBytes, query, options, progress, cancellationToken).ConfigureAwait(false);
 
+		var collector = new MatchCollector();
 		foreach (string path in results)
 		{
-			if (_matchPathSet.Add(path))
-			{
-				_matchPaths.Add(path);
-			}
+			collector.Add(path);
 		}
 
-		if (_matchPaths.Count > 0)
-		{
-			ActiveMatchIndex = 0;
-		}
-
-		return _matchPaths.Count;
+		return SetMatches(collector.Paths);
 	}
 
 	#endregion
 
 	#region Private Methods
 
-	private void SearchPlainText(
+	private bool TryCreateMatcher(string query, JsonSearchOptions options,
+		[System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out TextMatcher? matcher)
+	{
+		StringComparison comparison = options.CaseSensitive
+			? StringComparison.Ordinal
+			: StringComparison.OrdinalIgnoreCase;
+
+		if (!options.UseRegex)
+		{
+			matcher = new TextMatcher(query, comparison, null);
+			return true;
+		}
+
+		RegexOptions regexOptions = RegexOptions.Compiled;
+		if (!options.CaseSensitive)
+		{
+			regexOptions |= RegexOptions.IgnoreCase;
+		}
+
+		// Read once: searches for successive keystrokes can run concurrently on the thread pool.
+		RegexCacheEntry? cached = _regexCache;
+		if (cached is null || cached.Pattern != query || cached.Options != regexOptions)
+		{
+			try
+			{
+				cached = new RegexCacheEntry(query, regexOptions,
+					new Regex(query, regexOptions, TimeSpan.FromSeconds(1)));
+			}
+			catch (ArgumentException)
+			{
+				matcher = null;
+				return false;
+			}
+
+			_regexCache = cached;
+		}
+
+		matcher = new TextMatcher(query, comparison, cached.Regex);
+		return true;
+	}
+
+	private static void SearchElement(
 		JsonElement element,
 		string path,
-		string query,
-		StringComparison comparison,
+		TextMatcher matcher,
 		JsonSearchOptions options,
+		MatchCollector collector,
 		CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
@@ -265,20 +285,17 @@ internal sealed class JsonSearchEngine
 		switch (element.ValueKind)
 		{
 			case JsonValueKind.Object:
-				foreach (JsonProperty prop in element.EnumerateObject())
+				foreach (KeyValuePair<string, JsonElement> prop in JsonObjectReader.GetProperties(element))
 				{
-					string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Name)}";
+					string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Key)}";
 
-					if (options.SearchKeys && prop.Name.Contains(query, comparison))
+					if (options.SearchKeys && matcher.IsMatch(prop.Key))
 					{
-						_matchPaths.Add(childPath);
-					}
-					else
-					{
-						SearchPlainTextValue(prop.Value, childPath, query, comparison, options, cancellationToken);
+						collector.Add(childPath);
 					}
 
-					SearchPlainText(prop.Value, childPath, query, comparison, options, cancellationToken);
+					MatchElementValue(prop.Value, childPath, matcher, options, collector);
+					SearchElement(prop.Value, childPath, matcher, options, collector, cancellationToken);
 				}
 
 				break;
@@ -288,8 +305,8 @@ internal sealed class JsonSearchEngine
 				foreach (JsonElement item in element.EnumerateArray())
 				{
 					string childPath = $"{path}/{i}";
-					SearchPlainTextValue(item, childPath, query, comparison, options, cancellationToken);
-					SearchPlainText(item, childPath, query, comparison, options, cancellationToken);
+					MatchElementValue(item, childPath, matcher, options, collector);
+					SearchElement(item, childPath, matcher, options, collector, cancellationToken);
 					i++;
 				}
 
@@ -297,20 +314,14 @@ internal sealed class JsonSearchEngine
 		}
 	}
 
-	private void SearchPlainTextValue(
+	private static void MatchElementValue(
 		JsonElement element,
 		string path,
-		string query,
-		StringComparison comparison,
+		TextMatcher matcher,
 		JsonSearchOptions options,
-		CancellationToken cancellationToken)
+		MatchCollector collector)
 	{
-		if (!options.SearchValues)
-		{
-			return;
-		}
-
-		if (element.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+		if (!options.SearchValues || element.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
 		{
 			return;
 		}
@@ -319,83 +330,18 @@ internal sealed class JsonSearchEngine
 			? element.GetString() ?? ""
 			: element.GetRawText();
 
-		if (valueText.Contains(query, comparison) && _matchPathSet.Add(path))
+		if (matcher.IsMatch(valueText))
 		{
-			_matchPaths.Add(path);
+			collector.Add(path);
 		}
 	}
 
-	private void SearchWithRegex(
-		JsonElement element,
-		string path,
-		Regex regex,
-		JsonSearchOptions options,
-		CancellationToken cancellationToken)
-	{
-		cancellationToken.ThrowIfCancellationRequested();
-
-		switch (element.ValueKind)
-		{
-			case JsonValueKind.Object:
-				foreach (JsonProperty prop in element.EnumerateObject())
-				{
-					string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Name)}";
-
-					if (options.SearchKeys && regex.IsMatch(prop.Name))
-					{
-						_matchPaths.Add(childPath);
-					}
-
-					if (options.SearchValues &&
-					    prop.Value.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
-					{
-						string valueText = prop.Value.ValueKind == JsonValueKind.String
-							? prop.Value.GetString() ?? ""
-							: prop.Value.GetRawText();
-
-						if (regex.IsMatch(valueText) && _matchPathSet.Add(childPath))
-						{
-							_matchPaths.Add(childPath);
-						}
-					}
-
-					SearchWithRegex(prop.Value, childPath, regex, options, cancellationToken);
-				}
-
-				break;
-
-			case JsonValueKind.Array:
-				int i = 0;
-				foreach (JsonElement item in element.EnumerateArray())
-				{
-					string childPath = $"{path}/{i}";
-
-					if (options.SearchValues && item.ValueKind is not (JsonValueKind.Object or JsonValueKind.Array))
-					{
-						string valueText = item.ValueKind == JsonValueKind.String
-							? item.GetString() ?? ""
-							: item.GetRawText();
-
-						if (regex.IsMatch(valueText))
-						{
-							_matchPaths.Add(childPath);
-						}
-					}
-
-					SearchWithRegex(item, childPath, regex, options, cancellationToken);
-					i++;
-				}
-
-				break;
-		}
-	}
-
-	private void SearchPlainText(
+	private static void SearchSource(
 		IJsonDocumentSource source,
 		string path,
-		string query,
-		StringComparison comparison,
+		TextMatcher matcher,
 		JsonSearchOptions options,
+		MatchCollector collector,
 		CancellationToken cancellationToken)
 	{
 		cancellationToken.ThrowIfCancellationRequested();
@@ -408,58 +354,19 @@ internal sealed class JsonSearchEngine
 
 		foreach (JsonChildDescriptor child in source.EnumerateChildren(path))
 		{
-			if (options.SearchKeys && child.PropertyName is not null &&
-			    child.PropertyName.Contains(query, comparison))
+			if (options.SearchKeys && child.PropertyName is not null && matcher.IsMatch(child.PropertyName))
 			{
-				_matchPaths.Add(child.Path);
-				_matchPathSet.Add(child.Path);
+				collector.Add(child.Path);
 			}
 
-			if (options.SearchValues && child.RawValue is not null &&
-			    child.RawValue.Contains(query, comparison) && _matchPathSet.Add(child.Path))
+			if (options.SearchValues && child.RawValue is not null && matcher.IsMatch(child.RawValue))
 			{
-				_matchPaths.Add(child.Path);
+				collector.Add(child.Path);
 			}
 
 			if (child.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
 			{
-				SearchPlainText(source, child.Path, query, comparison, options, cancellationToken);
-			}
-		}
-	}
-
-	private void SearchWithRegex(
-		IJsonDocumentSource source,
-		string path,
-		Regex regex,
-		JsonSearchOptions options,
-		CancellationToken cancellationToken)
-	{
-		cancellationToken.ThrowIfCancellationRequested();
-
-		JsonValueKind kind = source.GetValueKind(path);
-		if (kind is not (JsonValueKind.Object or JsonValueKind.Array))
-		{
-			return;
-		}
-
-		foreach (JsonChildDescriptor child in source.EnumerateChildren(path))
-		{
-			if (options.SearchKeys && child.PropertyName is not null && regex.IsMatch(child.PropertyName))
-			{
-				_matchPaths.Add(child.Path);
-				_matchPathSet.Add(child.Path);
-			}
-
-			if (options.SearchValues && child.RawValue is not null &&
-			    regex.IsMatch(child.RawValue) && _matchPathSet.Add(child.Path))
-			{
-				_matchPaths.Add(child.Path);
-			}
-
-			if (child.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
-			{
-				SearchWithRegex(source, child.Path, regex, options, cancellationToken);
+				SearchSource(source, child.Path, matcher, options, collector, cancellationToken);
 			}
 		}
 	}

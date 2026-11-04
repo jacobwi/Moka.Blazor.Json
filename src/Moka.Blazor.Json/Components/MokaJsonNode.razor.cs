@@ -300,6 +300,8 @@ public sealed partial class MokaJsonNode : ComponentBase
 	private bool _previousShowLineNumbers;
 	private MokaJsonToggleStyle _previousToggleStyle;
 	private MokaJsonToggleSize _previousToggleSize;
+	private bool _previousShowChildCount;
+	private bool _previousReadOnly;
 	private InlineEditState? _previousEditState;
 
 	/// <inheritdoc />
@@ -309,6 +311,7 @@ public sealed partial class MokaJsonNode : ComponentBase
 		if (Node != _previousNode || IsSelected != _previousIsSelected ||
 		    ShowLineNumbers != _previousShowLineNumbers ||
 		    ToggleStyle != _previousToggleStyle || ToggleSize != _previousToggleSize ||
+		    ShowChildCount != _previousShowChildCount || ReadOnly != _previousReadOnly ||
 		    editStateChanged)
 		{
 			_previousNode = Node;
@@ -316,6 +319,8 @@ public sealed partial class MokaJsonNode : ComponentBase
 			_previousShowLineNumbers = ShowLineNumbers;
 			_previousToggleStyle = ToggleStyle;
 			_previousToggleSize = ToggleSize;
+			_previousShowChildCount = ShowChildCount;
+			_previousReadOnly = ReadOnly;
 			_previousEditState = EditState;
 			return true;
 		}

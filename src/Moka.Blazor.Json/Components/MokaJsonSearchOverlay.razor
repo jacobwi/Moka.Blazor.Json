@@ -6,6 +6,8 @@
 	       value="@Query"
 	       @oninput="HandleInput"
 	       @onkeydown="HandleKeyDown"
+	       @onkeydown:stopPropagation="true"
+	       aria-label="Search"
 	       id="@InputId"/>
 
 	<label style="font-size: 11px; display: flex; align-items: center; gap: 2px;">
@@ -19,7 +21,11 @@
 	</label>
 
 	<span class="moka-json-search-info">
-		@if (MatchCount > 0)
+		@if (IsPending && !string.IsNullOrEmpty(Query))
+		{
+			<span>Searching...</span>
+		}
+		else if (MatchCount > 0)
 		{
 			@($"{ActiveMatchIndex + 1} of {MatchCount}")
 		}
@@ -29,7 +35,7 @@
 		}
 	</span>
 
-	<button @onclick="OnPrevious" title="Previous (Shift+F3)" disabled="@(MatchCount == 0)">&#x25B2;</button>
-	<button @onclick="OnNext" title="Next (F3)" disabled="@(MatchCount == 0)">&#x25BC;</button>
+	<button @onclick="OnPrevious" title="Previous (Shift+Enter, Shift+F3, Up)" disabled="@(MatchCount == 0 && !IsPending)">&#x25B2;</button>
+	<button @onclick="OnNext" title="Next (Enter, F3, Down)" disabled="@(MatchCount == 0 && !IsPending)">&#x25BC;</button>
 	<button @onclick="OnClose" title="Close (Esc)">&#x2715;</button>
 </div>

@@ -132,22 +132,32 @@ Access the component via `@ref` to call methods on the `IMokaJsonViewer` interfa
 
 **Available methods:**
 
-- `NavigateToAsync(jsonPointer)` &mdash; navigate to a JSON Pointer path (RFC 6901)
-- `ExpandToDepth(depth)` &mdash; expand nodes to depth (-1 for all)
-- `ExpandAll()` / `CollapseAll()` &mdash; expand or collapse the entire tree
-- `SearchAsync(query, options)` &mdash; search with optional regex/case sensitivity
-- `NextMatch()` / `PreviousMatch()` &mdash; navigate search results
-- `ClearSearch()` &mdash; clear search state
-- `Undo()` / `Redo()` &mdash; undo/redo edit operations
-- `GetJson(indented)` &mdash; get the current JSON as a string
+- `NavigateToAsync(jsonPointer)`: select a node by JSON Pointer (RFC 6901), expanding and scrolling to it. `""` is the root; `"/"` is a property named `""`
+- `ExpandToDepth(depth)`: expand nodes to depth (-1 for all)
+- `ExpandAllAsync()` / `CollapseAll()`: expand or collapse the entire tree
+- `SearchAsync(query, options)`: search with optional regex/case sensitivity, highlighting and scrolling to the first match
+- `NextMatchAsync()` / `PreviousMatchAsync()`: move between search results
+- `ClearSearch()`: clear search state
+- `UndoAsync()` / `RedoAsync()`: undo/redo edit operations
+- `GetJson(indented)`: get the current JSON as a string
+
+`ExpandAll()`, `NextMatch()`, `PreviousMatch()`, `Undo()` and `Redo()` still exist. They start the operation without waiting for it and report failures through `OnError`. Prefer the `Async` versions when you need to know it finished.
+
+The async methods are safe to call from any thread; they run on the component's dispatcher.
+
+Settings the user changes in the settings panel (theme, read-only, line numbers and so on) stay in effect when your page re-renders. Passing a *different* value for that parameter takes over again.
 
 ## Keyboard Shortcuts
 
 | Shortcut | Action |
 |----------|--------|
-| `Ctrl+F` | Toggle search |
-| `F3` / `Enter` | Next match |
-| `Shift+F3` | Previous match |
+| `Ctrl+F` | Open search, or focus the search box if it's already open |
+| `Enter` / `F3` / `Down` | Next match (scrolls it into view) |
+| `Shift+Enter` / `Shift+F3` / `Up` | Previous match |
 | `Esc` | Close search |
+| `F2` | Rename the selected key (edit mode) |
+| `Delete` | Delete the selected node (edit mode) |
 | `Ctrl+Z` | Undo (edit mode) |
-| `Ctrl+Y` | Redo (edit mode) |
+| `Ctrl+Y` / `Ctrl+Shift+Z` | Redo (edit mode) |
+
+Shortcuts apply while focus is inside the viewer; click a node first. `Cmd` works in place of `Ctrl` on macOS.

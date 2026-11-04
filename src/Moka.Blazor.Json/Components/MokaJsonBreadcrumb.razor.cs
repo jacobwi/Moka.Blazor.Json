@@ -26,6 +26,8 @@ public sealed partial class MokaJsonBreadcrumb : ComponentBase
 
 	private Task HandleRootClick() => OnNavigate.InvokeAsync(string.Empty);
 
+	private static bool IsArrayIndex(string segment) => segment.Length > 0 && segment.All(char.IsAsciiDigit);
+
 	private static bool NeedsQuoting(string propertyName)
 	{
 		if (propertyName.Length == 0)
@@ -95,7 +97,7 @@ public sealed partial class MokaJsonBreadcrumb : ComponentBase
 				return _cachedSegments;
 			}
 
-			string[] parts = Path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+			string[] parts = JsonPointerHelper.Split(Path);
 			var segments = new List<BreadcrumbSegment>(parts.Length);
 			var sb = new StringBuilder(Path.Length);
 
@@ -106,9 +108,9 @@ public sealed partial class MokaJsonBreadcrumb : ComponentBase
 				sb.Append(part);
 
 				string displayLabel;
-				if (int.TryParse(unescaped, out int index))
+				if (IsArrayIndex(unescaped))
 				{
-					displayLabel = $"[{index}]";
+					displayLabel = $"[{unescaped}]";
 				}
 				else if (NeedsQuoting(unescaped))
 				{

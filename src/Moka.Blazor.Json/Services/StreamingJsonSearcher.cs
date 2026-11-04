@@ -27,10 +27,18 @@ internal static class StreamingJsonSearcher
 			return [];
 		}
 
-		return await Task.Run(
-			() => Search(jsonBytes.Span, query, options ?? new JsonSearchOptions(), progress,
-				jsonBytes.Length, cancellationToken),
-			cancellationToken).ConfigureAwait(false);
+		return await Task.Run(() =>
+		{
+			try
+			{
+				return Search(jsonBytes.Span, query, options ?? new JsonSearchOptions(), progress,
+					jsonBytes.Length, cancellationToken);
+			}
+			catch (RegexMatchTimeoutException)
+			{
+				return [];
+			}
+		}, cancellationToken).ConfigureAwait(false);
 	}
 
 	private static List<string> Search(
@@ -67,7 +75,7 @@ internal static class StreamingJsonSearcher
 			{
 				regex = new Regex(query, regexOpts, TimeSpan.FromSeconds(1));
 			}
-			catch (RegexParseException)
+			catch (ArgumentException)
 			{
 				return matches;
 			}

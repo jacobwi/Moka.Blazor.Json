@@ -199,7 +199,12 @@ internal sealed class JsonContextBuilder : IAiContextBuilder
 					propCount++;
 					if (propCount > 20)
 					{
-						sb.AppendLine($"{indent}  ... ({element.EnumerateObject().Count() - 20} more properties)");
+						int remaining = element.EnumerateObject().Count() - propCount;
+						if (remaining > 0)
+						{
+							sb.AppendLine($"{indent}  ... ({remaining} more properties)");
+						}
+
 						break;
 					}
 				}
@@ -285,13 +290,13 @@ internal sealed class JsonContextBuilder : IAiContextBuilder
 
 	private static JsonElement? NavigatePointer(JsonElement root, string pointer)
 	{
-		if (string.IsNullOrEmpty(pointer) || pointer == "/")
+		if (string.IsNullOrEmpty(pointer))
 		{
 			return root;
 		}
 
 		JsonElement current = root;
-		string[] segments = pointer.TrimStart('/').Split('/');
+		string[] segments = pointer[0] == '/' ? pointer[1..].Split('/') : pointer.Split('/');
 
 		foreach (string segment in segments)
 		{

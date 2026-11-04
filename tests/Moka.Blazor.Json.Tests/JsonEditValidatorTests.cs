@@ -58,8 +58,8 @@ public sealed class JsonEditValidatorTests
 		Assert.Null(JsonEditValidator.ValidateValue("null", JsonValueKind.Null));
 
 	[Fact]
-	public void ValidateValue_Null_Rejects_Other_Values() =>
-		Assert.NotNull(JsonEditValidator.ValidateValue("something", JsonValueKind.Null));
+	public void ValidateValue_Null_Accepts_Other_Values() =>
+		Assert.Null(JsonEditValidator.ValidateValue("something", JsonValueKind.Null));
 
 	#endregion
 

@@ -8,7 +8,6 @@ public sealed class JsonPathConverterTests
 	[Theory]
 	[InlineData(null, "$")]
 	[InlineData("", "$")]
-	[InlineData("/", "$")]
 	public void ToDotNotation_RootPaths_ReturnsDollar(string? input, string expected) =>
 		Assert.Equal(expected, JsonPathConverter.ToDotNotation(input));
 
