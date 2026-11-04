@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.MOKA_RUNNER || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -29,7 +29,9 @@ jobs:
           dotnet-quality: 'preview'
 
       - name: Install MokaDocs
-        run: dotnet tool install --global mokadocs
+        run: |
+          dotnet tool install --global mokadocs
+          echo "$HOME/.dotnet/tools" >> "$GITHUB_PATH"
 
       - name: Build documentation
         run: mokadocs build --base-path /Moka.Blazor.Json/
@@ -41,7 +43,7 @@ jobs:
 
   deploy:
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.MOKA_RUNNER || 'ubuntu-latest' }}
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
