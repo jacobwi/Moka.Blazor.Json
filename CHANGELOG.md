@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.6.3] - 2026-11-04
+
+### ⚡ Performance
+Measured with release builds (best of 3 where repeated).
+
+| Scenario | Before | After |
+|---|---|---|
+| Expand All + render rows, 80K objects (in-memory) | 16.9 s | 0.12 s |
+| Search with no match, 80K objects (in-memory) | 11.1 s | 27 ms |
+| Load a 28 MB document (lazy mode) | 2.15 s | 0.16 s |
+| Index memory for that document | 357 MB | 17 MB |
+| 50 child counts of nested containers (lazy mode) | 3.5 s | 0.7 ms |
+| Worst cached lookup while another thread parses (lazy mode) | 112 ms | 2.5 ms |
+
+- **In-memory documents**: every lookup by path walked down from the root, which is linear in both array position and property count, so Expand All and search were quadratic. Objects and arrays are now remembered as they're enumerated and lookups start from the nearest remembered ancestor. Recursion also passes along the node type it already knows instead of looking it up again
+- **Lazy index holds only objects and arrays.** Primitive values are read from their parsed parent. Property names are only decoded when a path needs them
+- **Lazy child counts**: indexing a container's children now records the count on the container, instead of counting by scanning the whole index on every call (and blocking on a background task to do it)
+- **Lazy parsing happens outside the cache lock**, so a lookup that hits the cache no longer waits for another thread's parse
+
+### 🔧 Build
+- CI, release and docs jobs can run on a self-hosted runner: set the `MOKA_RUNNER` repository variable to the runner's label. Pull requests always run on GitHub's runners, since a fork's PR would otherwise run its code on that machine. Delete the variable to go back
+
 ## [0.6.2] - 2026-11-04
 
 ### 🐛 Fixed
