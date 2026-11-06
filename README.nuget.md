@@ -1,79 +1,64 @@
 # Moka.Blazor.Json
 
-A high-performance Blazor JSON viewer and editor component with virtualized rendering, lazy parsing, search, theming, and extensible context menus.
+A JSON viewer and editor for Blazor. Use it for a small API response or a file that's many GB.
 
-## Features
+Works in Blazor Server, WebAssembly and MAUI Hybrid, on .NET 9 and 10.
 
-- **Virtualized rendering** - smooth scrolling for documents up to 2 GB
-- **Lazy parsing** - byte-offset indexing for documents over 50 MB
-- **Inline editing** - double-click to edit values, rename keys, add/delete nodes, undo/redo
-- **Search** - plain text, regex, case-sensitive with match navigation
-- **Theming** - light, dark, auto, or custom via CSS variables
-- **Settings panel** - built-in gear menu for runtime configuration
-- **Toolbar modes** - text, icon, or both
-- **Context menu** - built-in + custom actions with type/property filtering
-- **Zero dependencies** - built on System.Text.Json
-- **Multi-target** - .NET 9 and .NET 10
+## Get started
 
-## Quick Start
-
-Register services in `Program.cs`:
+Register it in `Program.cs`:
 
 ```csharp
 builder.Services.AddMokaJsonViewer();
 ```
 
-Add the component:
+Add it to a page:
 
 ```razor
 @using Moka.Blazor.Json.Components
 
-<MokaJsonViewer Json="@myJson" />
+<MokaJsonViewer Json="@json" />
 
 @code {
-    private string myJson = """{"name":"Alice","age":30}""";
+    private string json = """{"name":"Alice","age":30}""";
 }
 ```
 
-## Configuration
+To allow editing, use `<MokaJsonViewer @bind-Json="json" ReadOnly="false" />`.
 
-```csharp
-builder.Services.AddMokaJsonViewer(options =>
-{
-    options.DefaultTheme = MokaJsonTheme.Dark;
-    options.DefaultToolbarMode = MokaJsonToolbarMode.IconAndText;
-    options.DefaultExpandDepth = 3;
-    options.LazyParsingThresholdBytes = 50 * 1024 * 1024;
-    options.ShowSettingsButton = true;
-});
+## Large files
+
+Pass a stream instead of a string, and keep it open while the viewer shows it:
+
+```razor
+<MokaJsonViewer JsonStream="file" Height="600px" />
+
+@code {
+    private FileStream file = File.OpenRead("big.json");
+}
 ```
 
-## Key Parameters
+The file is not loaded into memory. The viewer scans it once to build a small index, then reads only the parts you open from disk. A 5.6 GB file opened in 9.5 seconds and used 42 MB. Documents over 50 MB work this way and are read-only.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| Json | string? | null | JSON string to display |
-| Theme | MokaJsonTheme | Auto | Auto, Light, Dark, or Inherit |
-| ReadOnly | bool | true | Disable editing |
-| MaxDepthExpanded | int | 2 | Initial expansion depth |
-| ToolbarMode | MokaJsonToolbarMode? | null | Text, Icon, or IconAndText |
-| ToggleStyle | MokaJsonToggleStyle | Triangle | Triangle, Chevron, PlusMinus, Arrow |
-| ShowSettingsButton | bool? | null | Show settings gear in toolbar |
-| WordWrap | bool | true | Enable word wrapping |
-| Height | string | 400px | Component height |
+## What's included
 
-## Related Packages
+- Search with plain text or regex
+- Inline editing with undo and redo
+- Light, dark and system themes, or your own with CSS variables
+- A right-click menu you can add your own actions to
+- Breadcrumb path, line numbers, and sorting keys
 
-| Package | Description |
-|---------|-------------|
-| Moka.Blazor.Json | Main component library |
-| Moka.Blazor.Json.Abstractions | Interfaces and models |
-| Moka.Blazor.Json.AI | AI assistant panel for JSON analysis (LM Studio, Ollama, ONNX) |
-| Moka.Blazor.Json.Diagnostics | Debug overlay for lazy parsing |
+## Related packages
 
-## Documentation
+| Package | What it adds |
+|---|---|
+| Moka.Blazor.Json.AI | A chat panel for your JSON (LM Studio, Ollama, ONNX or your own client). Doesn't build for WebAssembly yet |
+| Moka.Blazor.Json.Diagnostics | An overlay showing what large file mode is doing |
+| Moka.Blazor.Json.Abstractions | The interfaces and models on their own |
 
-Full docs: https://jacobwi.github.io/Moka.Blazor.Json/
+## Docs
+
+https://jacobwi.github.io/Moka.Blazor.Json/
 
 ## License
 

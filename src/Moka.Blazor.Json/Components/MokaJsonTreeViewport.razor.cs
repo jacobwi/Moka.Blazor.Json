@@ -102,4 +102,28 @@ public sealed partial class MokaJsonTreeViewport : ComponentBase
 	///     Scrolls the row at <paramref name="rowIndex" /> of <see cref="Nodes" /> into view.
 	/// </summary>
 	public ValueTask ScrollToRowAsync(int rowIndex) => Interop.ScrollToRowAsync(ViewportId, rowIndex);
+
+	private List<FlattenedJsonNode>? _renderedNodes;
+	private string? _renderedSelectedPath;
+	private InlineEditState? _renderedEditState;
+	private (bool, bool, MokaJsonToggleStyle, MokaJsonToggleSize, bool) _renderedFlags;
+
+	/// <inheritdoc />
+	protected override bool ShouldRender()
+	{
+		(bool, bool, MokaJsonToggleStyle, MokaJsonToggleSize, bool) flags =
+			(ShowLineNumbers, ShowChildCount, ToggleStyle, ToggleSize, ReadOnly);
+
+		if (ReferenceEquals(Nodes, _renderedNodes) && SelectedPath == _renderedSelectedPath &&
+		    ReferenceEquals(EditState, _renderedEditState) && flags == _renderedFlags)
+		{
+			return false;
+		}
+
+		_renderedNodes = Nodes;
+		_renderedSelectedPath = SelectedPath;
+		_renderedEditState = EditState;
+		_renderedFlags = flags;
+		return true;
+	}
 }

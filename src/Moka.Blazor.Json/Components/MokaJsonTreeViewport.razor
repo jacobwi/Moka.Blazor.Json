@@ -1,7 +1,7 @@
 @namespace Moka.Blazor.Json.Components
 
 <div class="moka-json-tree-viewport" id="@ViewportId">
-	<Virtualize Items="@Nodes" Context="node" OverscanCount="20">
+	<Virtualize Items="@Nodes" Context="node" ItemSize="21" OverscanCount="20">
 		<MokaJsonNode @key="node.Id"
 		              Node="@node"
 		              IsSelected="@(node.Path == SelectedPath && !node.IsClosingBracket)"
@@ -10,7 +10,7 @@
 		              ToggleStyle="ToggleStyle"
 		              ToggleSize="ToggleSize"
 		              ReadOnly="ReadOnly"
-		              EditState="EditState"
+		              EditState="@(EditState?.Path == node.Path ? EditState : null)"
 		              OnToggle="OnToggle"
 		              OnSelect="OnSelect"
 		              OnContextMenu="OnContextMenu"

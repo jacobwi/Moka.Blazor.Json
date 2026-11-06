@@ -36,9 +36,7 @@ internal interface IJsonDocumentSource : IAsyncDisposable
 	bool SupportsEditing { get; }
 
 	/// <summary>
-	///     Gets the child count for the container at the given JSON Pointer path.
-	///     Returns 0 for primitives. Returns -1 if the count is unknown and would require
-	///     an expensive scan (lazy sources may return this for deep containers).
+	///     Gets the child count for the container at the given JSON Pointer path. Returns 0 for primitives.
 	/// </summary>
 	int GetChildCount(string path);
 
@@ -47,6 +45,10 @@ internal interface IJsonDocumentSource : IAsyncDisposable
 	///     Each child is described as a lightweight <see cref="JsonChildDescriptor" />.
 	/// </summary>
 	IEnumerable<JsonChildDescriptor> EnumerateChildren(string path);
+
+	IEnumerable<JsonChildDescriptor> EnumerateChildren(string path, int start, int count);
+
+	int GetChildIndex(string path, string escapedSegment);
 
 	/// <summary>
 	///     Gets the raw string representation of a primitive node at the given path.
@@ -59,26 +61,31 @@ internal interface IJsonDocumentSource : IAsyncDisposable
 	/// </summary>
 	JsonValueKind GetValueKind(string path);
 
+	long GetByteLength(string path);
+
 	/// <summary>
-	///     Gets the <see cref="JsonElement" /> at the given path. For lazy implementations,
-	///     this parses the subtree on demand and may cache the result.
+	///     Gets the <see cref="JsonElement" /> at the given path. For lazy implementations, this parses the
+	///     subtree on demand and may cache the result.
 	/// </summary>
+	/// <exception cref="InvalidOperationException">The node is too large to materialize.</exception>
 	JsonElement GetElement(string path);
 
 	/// <summary>
 	///     Returns the full JSON as a string.
 	/// </summary>
+	/// <exception cref="InvalidOperationException">The document is too large to materialize.</exception>
 	string GetJsonString(bool indented = true);
 
-	/// <summary>
-	///     Counts all nodes in the document tree. Returns -1 if the count is unavailable
-	///     without a full traversal (lazy sources).
-	/// </summary>
-	int CountNodes();
+	// Throws InvalidOperationException if the document is too large to materialize, as GetJsonString does.
+	void WriteJson(Stream destination, bool indented = true);
 
 	/// <summary>
-	///     Gets the maximum depth of the document tree. Returns -1 if unavailable
-	///     without a full traversal (lazy sources).
+	///     Counts all nodes in the document tree.
+	/// </summary>
+	long CountNodes();
+
+	/// <summary>
+	///     Gets the maximum depth of the document tree.
 	/// </summary>
 	int GetMaxDepth();
 }

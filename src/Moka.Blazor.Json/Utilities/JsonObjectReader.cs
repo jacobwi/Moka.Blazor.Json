@@ -1,3 +1,4 @@
+using System.Buffers.Binary;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 
@@ -148,7 +149,7 @@ internal static class JsonObjectReader
 						break;
 
 					case JsonTokenType.PropertyName:
-						if (reader.ValueIsEscaped || !scopes[^1]!.Add(Fnv1a(reader.ValueSpan)))
+						if (reader.ValueIsEscaped || !scopes[^1]!.Add(HashBytes(reader.ValueSpan)))
 						{
 							return true;
 						}
@@ -193,12 +194,30 @@ internal static class JsonObjectReader
 		return positions.TryGetValue(name, out int index) ? index : -1;
 	}
 
-	private static ulong Fnv1a(ReadOnlySpan<byte> bytes)
+	// Hashes eight bytes at a time. A large document has hundreds of millions of property names, so this runs on
+	// the hot path of indexing.
+	public static ulong HashBytes(ReadOnlySpan<byte> bytes)
 	{
-		ulong hash = 14695981039346656037UL;
-		foreach (byte b in bytes)
+		const ulong Multiplier = 0x9E3779B185EBCA87UL;
+
+		ulong hash = (ulong)bytes.Length * Multiplier;
+		while (bytes.Length >= sizeof(ulong))
 		{
-			hash = (hash ^ b) * 1099511628211UL;
+			hash = (hash ^ BinaryPrimitives.ReadUInt64LittleEndian(bytes)) * Multiplier;
+			hash ^= hash >> 29;
+			bytes = bytes[sizeof(ulong)..];
+		}
+
+		if (!bytes.IsEmpty)
+		{
+			ulong tail = 0;
+			foreach (byte b in bytes)
+			{
+				tail = (tail << 8) | b;
+			}
+
+			hash = (hash ^ tail) * Multiplier;
+			hash ^= hash >> 29;
 		}
 
 		return hash;

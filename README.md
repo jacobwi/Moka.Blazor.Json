@@ -1,288 +1,209 @@
 # Moka.Blazor.Json
 
-A high-performance Blazor JSON viewer and editor component with virtualized rendering, lazy parsing for large documents, search, theming, and extensible context menus.
+A JSON viewer and editor for Blazor. Use it for a small API response or a file that's many GB.
 
-<p align="center">
-  <a href="https://dotnet.microsoft.com"><img src="https://img.shields.io/badge/.NET-9.0%20%7C%2010.0-512BD4?style=flat-square&logo=dotnet" alt=".NET 9/10" /></a>
-  <a href="https://github.com/jacobwi/Moka.Blazor.Json/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue?style=flat-square" alt="MIT License" /></a>
-  <a href="https://github.com/jacobwi/Moka.Blazor.Json/actions"><img src="https://img.shields.io/github/actions/workflow/status/jacobwi/Moka.Blazor.Json/ci.yml?style=flat-square&label=build" alt="Build" /></a>
-  <a href="https://www.nuget.org/packages/Moka.Blazor.Json"><img src="https://img.shields.io/nuget/v/Moka.Blazor.Json?style=flat-square&logo=nuget&color=orange" alt="NuGet" /></a>
-</p>
+[![NuGet](https://img.shields.io/nuget/v/Moka.Blazor.Json?style=flat-square&logo=nuget&color=orange)](https://www.nuget.org/packages/Moka.Blazor.Json)
+[![Build](https://img.shields.io/github/actions/workflow/status/jacobwi/Moka.Blazor.Json/ci.yml?style=flat-square&label=build)](https://github.com/jacobwi/Moka.Blazor.Json/actions)
+![.NET 9 and 10](https://img.shields.io/badge/.NET-9%20%7C%2010-512BD4?style=flat-square&logo=dotnet)
 
-## Features
+Works in Blazor Server, WebAssembly and MAUI Hybrid.
 
-- **Virtualized rendering** — handles documents up to 2 GB with smooth scrolling
-- **Lazy parsing** — documents over 50 MB use byte-offset indexing with on-demand subtree parsing
-- **Inline editing** — double-click to edit values, rename keys, add/delete nodes with undo/redo
-- **Search** — plain text, regex, case-sensitive with match navigation; streaming search for large docs
-- **Theming** — light, dark, auto (system preference), or fully custom via CSS variables
-- **Settings panel** — built-in gear menu for runtime configuration of all display/behavior settings
-- **Toolbar modes** — text-only, icon-only, or icon+text toolbar display
-- **Context menu** — built-in actions + extensible custom actions with type/property filtering
-- **Breadcrumb navigation** — clickable path segments for easy traversal
-- **Key sorting** — sort object keys alphabetically (single level or recursive)
-- **Node scoping** — zoom into any subtree as if it were the root
-- **AI assistant** — optional AI-powered chat panel for JSON analysis, summarization, and transformation
-- **Zero external dependencies** — core library built on `System.Text.Json`
-- **Multi-target** — supports .NET 9 and .NET 10
-
-## Packages
-
-| Package | Description |
-|---------|-------------|
-| [Moka.Blazor.Json](https://www.nuget.org/packages/Moka.Blazor.Json) | Main component library |
-| [Moka.Blazor.Json.Abstractions](https://www.nuget.org/packages/Moka.Blazor.Json.Abstractions) | Interfaces and models for programmatic access |
-| [Moka.Blazor.Json.AI](https://www.nuget.org/packages/Moka.Blazor.Json.AI) | AI assistant panel for JSON analysis (LM Studio, Ollama, ONNX, or custom) |
-| [Moka.Blazor.Json.Diagnostics](https://www.nuget.org/packages/Moka.Blazor.Json.Diagnostics) | Debug overlay for lazy parsing diagnostics |
-
-## Installation
+## Get started
 
 ```bash
 dotnet add package Moka.Blazor.Json
 ```
 
-## Quick Start
-
-### 1. Register services
+Register it in `Program.cs`:
 
 ```csharp
-// Program.cs
 builder.Services.AddMokaJsonViewer();
 ```
 
-### 2. Add the component
+Add it to a page:
 
 ```razor
 @using Moka.Blazor.Json.Components
 
-<MokaJsonViewer Json="@myJson" />
+<MokaJsonViewer Json="@json" />
 
 @code {
-    private string myJson = """{"name":"Alice","age":30,"tags":["dev","admin"]}""";
+    private string json = """{"name":"Alice","age":30,"tags":["dev","admin"]}""";
 }
 ```
 
-### 3. Two-way binding
+## Let people edit
+
+Turn off read-only and bind the value. `json` updates as they edit.
 
 ```razor
-<MokaJsonViewer @bind-Json="myJson" ReadOnly="false" />
+<MokaJsonViewer @bind-Json="json" ReadOnly="false" />
+```
+
+Double-click a value to change it, or right-click to add, delete or rename. `Ctrl+Z` and `Ctrl+Y` undo and redo.
+
+## Open large files
+
+Pass a stream instead of a string. Keep it open while the viewer shows it, and close it yourself afterwards.
+
+```razor
+<MokaJsonViewer JsonStream="file" Height="600px" />
 
 @code {
-    private string myJson = """{"name":"Alice"}""";
-    // myJson updates automatically when the document is modified
+    private FileStream file = File.OpenRead("big.json");
 }
 ```
 
-## Parameters
+The file is not loaded into memory. The viewer scans it once to build a small index, then reads only the parts you open from disk. This happens automatically for anything over 50 MB.
 
-| Parameter | Type | Default | Description |
-|-----------|------|---------|-------------|
-| `Json` | `string?` | `null` | JSON string to display |
-| `JsonStream` | `Stream?` | `null` | Stream for large documents |
-| `Theme` | `MokaJsonTheme` | `Auto` | `Auto`, `Light`, `Dark`, or `Inherit` |
-| `ShowToolbar` | `bool` | `true` | Show the toolbar |
-| `ShowBottomBar` | `bool` | `true` | Show the status bar |
-| `ShowBreadcrumb` | `bool` | `true` | Show the breadcrumb path |
-| `ShowLineNumbers` | `bool` | `false` | Show line numbers |
-| `ShowSettingsButton` | `bool?` | `null` | Show settings gear in toolbar (defaults from DI options) |
-| `ReadOnly` | `bool` | `true` | Disable editing |
-| `MaxDepthExpanded` | `int` | `2` | Initial expansion depth |
-| `Height` | `string` | `"400px"` | Component height |
-| `ToolbarMode` | `MokaJsonToolbarMode?` | `null` | `Text`, `Icon`, or `IconAndText` |
-| `ToggleStyle` | `MokaJsonToggleStyle` | `Triangle` | `Triangle`, `Chevron`, `PlusMinus`, `Arrow` |
-| `ToggleSize` | `MokaJsonToggleSize` | `Small` | `ExtraSmall` through `ExtraLarge` |
-| `CollapseMode` | `MokaJsonCollapseMode` | `Depth` | `Depth`, `Root`, or `Expanded` |
-| `WordWrap` | `bool` | `true` | Enable word wrapping |
-| `OnNodeSelected` | `EventCallback<JsonNodeSelectedEventArgs>` | | Fires when a node is clicked |
-| `OnJsonChanged` | `EventCallback<JsonChangeEventArgs>` | | Fires when JSON is modified |
-| `JsonChanged` | `EventCallback<string?>` | | Two-way binding callback |
-| `OnError` | `EventCallback<JsonErrorEventArgs>` | | Fires on parse/runtime errors |
-| `ContextMenuActions` | `IReadOnlyList<MokaJsonContextAction>?` | `null` | Custom context menu actions |
-| `ToolbarExtra` | `RenderFragment?` | `null` | Extra toolbar content |
+Here's a 5.6 GB file with 134 million nodes, on a desktop PC with the file already in the Windows file cache:
 
-## Configuration
+| | |
+|---|---|
+| Open the file | 9.5 s, with a progress bar and a Cancel button |
+| Memory after opening | 42 MB |
+| Memory after expanding and searching | 165 MB |
+| Expand an array with 18,151 items | 9 ms |
+| Search the whole file | 9 s, with progress |
+
+A few things work differently on documents this size:
+
+- They're read-only.
+- Expand All stops after 100,000 rows and tells you. Right-click a node to open or scope to just that part.
+- Search stops at 10,000 matches and shows `10,000+`.
+- Arrays and objects with more than 100,000 items open as groups, such as `[0 ... 99,999]`.
+- Copy and Export say so if the content is over their size limits, rather than running out of memory.
+
+**Uploads:** pass `file.OpenReadStream(long.MaxValue)` from `InputFile`. It can't be read on demand, so it's copied to a temp file first. That file is deleted when the viewer closes it.
+
+**WebAssembly:** the browser has one thread and no real disk, so the temp file sits in the page's memory. The limit there is 1 GB by default.
+
+## What's included
+
+- Search with plain text or regex, and step through the matches
+- Light, dark and system themes, or your own with CSS variables
+- A right-click menu you can add your own actions to
+- Breadcrumb path, line numbers, and sorting keys
+- Scope to any node to work with just that part
+- A settings panel so people can change the display themselves
+
+## Common parameters
+
+| Parameter | Default | What it does |
+|---|---|---|
+| `Json` | | The JSON to show, as a string |
+| `JsonStream` | | The JSON to show, as a stream |
+| `ReadOnly` | `true` | Set to `false` to allow editing |
+| `Height` | `400px` | Height of the viewer |
+| `Theme` | `Auto` | `Auto`, `Light`, `Dark` or `Inherit` |
+| `MaxDepthExpanded` | `2` | How many levels start open |
+| `ShowLineNumbers` | `false` | Show line numbers |
+| `WordWrap` | `true` | Wrap long values |
+| `OnNodeSelected` | | Runs when someone clicks a node |
+| `OnJsonChanged` | | Runs when the JSON is edited |
+| `OnError` | | Runs when loading fails |
+
+More are listed in the [docs](https://jacobwi.github.io/Moka.Blazor.Json/).
+
+## Settings for every viewer
 
 ```csharp
 builder.Services.AddMokaJsonViewer(options =>
 {
     options.DefaultTheme = MokaJsonTheme.Dark;
-    options.DefaultToolbarMode = MokaJsonToolbarMode.IconAndText;
     options.DefaultExpandDepth = 3;
-    options.MaxDocumentSizeBytes = 2L * 1024 * 1024 * 1024; // 2 GB
-    options.LazyParsingThresholdBytes = 50 * 1024 * 1024;   // 50 MB
-    options.MaxClipboardSizeBytes = 100 * 1024 * 1024;      // 100 MB
-    options.SearchDebounceMs = 300;
-    options.ShowSettingsButton = true;
+    options.LazyParsingThresholdBytes = 50 * 1024 * 1024; // large file mode starts here
+    options.MaxClipboardSizeBytes = 50 * 1024 * 1024;
+    options.MaxExportSizeBytes = 512 * 1024 * 1024;
+    options.MaxSearchMatches = 10_000;
 });
 ```
 
-## Programmatic Control
-
-The component implements `IMokaJsonViewer` for programmatic access:
+## Control it from code
 
 ```razor
-<MokaJsonViewer @ref="_viewer" Json="@json" />
+<MokaJsonViewer @ref="viewer" Json="@json" />
 
 @code {
-    private MokaJsonViewer _viewer = null!;
+    private MokaJsonViewer viewer = null!;
 
-    private async Task NavigateToUser()
+    private async Task FindErrors()
     {
-        await _viewer.NavigateToAsync("/users/0/name");
-    }
-
-    private async Task Search()
-    {
-        var matchCount = await _viewer.SearchAsync("error", new JsonSearchOptions
-        {
-            CaseSensitive = false,
-            UseRegex = true,
-            SearchKeys = true,
-            SearchValues = true
-        });
+        await viewer.NavigateToAsync("/users/0/name");
+        int matches = await viewer.SearchAsync("error");
     }
 }
 ```
 
-**Available methods:**
-- `NavigateToAsync(jsonPointer)` — Navigate to a JSON Pointer path
-- `ExpandToDepth(depth)` — Expand nodes to depth (-1 for all)
-- `ExpandAll()` / `CollapseAll()` — Expand or collapse the entire tree
-- `SearchAsync(query, options)` — Search with optional regex/case sensitivity
-- `NextMatch()` / `PreviousMatch()` — Navigate search results
-- `ClearSearch()` — Clear search state
-- `GetJson(indented)` — Get the current JSON as a string
+Also available: `ExpandAllAsync()`, `CollapseAll()`, `ExpandToDepth(depth)`, `NextMatchAsync()`, `PreviousMatchAsync()`, `ClearSearch()`, `UndoAsync()`, `RedoAsync()` and `GetJson()`.
 
-## Custom Context Menu Actions
+## Add to the right-click menu
 
-```csharp
-private readonly List<MokaJsonContextAction> _actions =
-[
-    new MokaJsonContextAction
-    {
-        Id = "open-url",
-        Label = "Open URL",
-        ShortcutHint = "Enter",
-        Order = 500,
-        HasSeparatorBefore = true,
-        IsVisible = ctx => ctx.ValueKind == JsonValueKind.String
-                           && ctx.RawValuePreview.StartsWith("\"http", StringComparison.OrdinalIgnoreCase),
-        OnExecute = ctx =>
+```razor
+<MokaJsonViewer Json="@json" ContextMenuActions="actions" />
+
+@code {
+    private readonly List<MokaJsonContextAction> actions =
+    [
+        new MokaJsonContextAction
         {
-            var url = ctx.RawValuePreview.Trim('"');
-            // Open URL...
-            return ValueTask.CompletedTask;
+            Id = "open-url",
+            Label = "Open URL",
+            IsVisible = ctx => ctx.ValueKind == JsonValueKind.String
+                               && ctx.RawValuePreview.StartsWith("\"http", StringComparison.OrdinalIgnoreCase),
+            OnExecute = ctx =>
+            {
+                string url = ctx.RawValuePreview.Trim('"');
+                // open it
+                return ValueTask.CompletedTask;
+            }
         }
-    }
-];
+    ];
+}
 ```
 
-```razor
-<MokaJsonViewer Json="@json" ContextMenuActions="_actions" />
-```
+## Keyboard shortcuts
 
-## Theming
+| Keys | Action |
+|---|---|
+| `Ctrl+F` | Search |
+| `F3` or `Enter` | Next match |
+| `Shift+F3` | Previous match |
+| `Esc` | Close search |
+| `Ctrl+Z` / `Ctrl+Y` | Undo / redo |
+| `F2` | Rename key |
+| `Delete` | Delete node |
 
-```razor
-@* Built-in themes *@
-<MokaJsonViewer Json="@json" Theme="MokaJsonTheme.Dark" />
-<MokaJsonViewer Json="@json" Theme="MokaJsonTheme.Light" />
-<MokaJsonViewer Json="@json" Theme="MokaJsonTheme.Auto" />
+## Optional packages
 
-@* Custom theme: use Inherit + your own CSS variables *@
-<MokaJsonViewer Json="@json" Theme="MokaJsonTheme.Inherit" />
-```
-
-Override CSS custom properties for full control — see [Theming documentation](https://jacobwi.github.io/Moka.Blazor.Json/guide/theming).
-
-## AI Assistant
-
-Add an AI-powered chat panel that understands your JSON data — summarize, analyze structure, generate schemas, transform, and query:
+**Moka.Blazor.Json.AI** adds a chat panel that can summarize, explain and transform your JSON. It works with LM Studio, Ollama, ONNX or your own `IChatClient`. It doesn't build for WebAssembly yet.
 
 ```bash
 dotnet add package Moka.Blazor.Json.AI
 ```
 
-```csharp
-// Program.cs
-builder.Services.AddMokaJsonViewer();
-builder.Services.AddMokaJsonAi(options =>
-{
-    // Default: LM Studio at localhost:1234
-    // For Ollama:
-    // options.Provider = AiProvider.Ollama;
-    // options.DefaultModel = "llama3.2";
-});
-```
-
 ```razor
-@using Moka.Blazor.Json.Components
-@using Moka.Blazor.Json.AI.Components
-
-<MokaJsonViewer @ref="_viewer" Json="@myJson" />
-<MokaJsonAiPanel Viewer="_viewer" />
-
-@code {
-    private MokaJsonViewer _viewer = null!;
-    private string myJson = """{"users":[{"name":"Alice","age":30}]}""";
-}
+<MokaJsonViewer @ref="viewer" Json="@json" />
+<MokaJsonAiPanel Viewer="viewer" />
 ```
 
-**Supported providers:**
-- **LM Studio / OpenAI-compatible** — any OpenAI API-compatible server (default)
-- **Ollama** — native Ollama API support
-- **ONNX Runtime GenAI** — fully embedded, no server needed (via `Moka.Blazor.AI.Onnx`)
-- **Custom** — bring your own `IChatClient` implementation
+Register it with `builder.Services.AddMokaJsonAi()`. See the [AI guide](https://jacobwi.github.io/Moka.Blazor.Json/guide/ai-assistant).
 
-**Features:** streaming responses, editable messages, configurable quick actions (Summarize, Analyze, Schema, Transform, Query), selection-aware context, **right-click "Ask AI" context menu action**, adjustable temperature/model/context size, three chat styles (Bubble, Classic, Compact), light/dark theme support.
-
-## Diagnostics
-
-For development, add the diagnostics package to monitor lazy parsing performance:
+**Moka.Blazor.Json.Diagnostics** adds an overlay showing what large file mode is doing: bytes parsed, cache hits and recent reads.
 
 ```bash
 dotnet add package Moka.Blazor.Json.Diagnostics
 ```
 
 ```razor
-@using Moka.Blazor.Json.Diagnostics.Components
-
-<MokaJsonViewer @ref="_viewer" Json="@json" />
-<MokaJsonDebugOverlay Viewer="_viewer" Enabled="true" />
+<MokaJsonViewer @ref="viewer" JsonStream="file" />
+<MokaJsonDebugOverlay Viewer="viewer" Enabled="true" />
 ```
 
-The overlay shows real-time coverage, parse stats, cache hit rates, and recent parse operations.
+**Moka.Blazor.Json.Abstractions** has the interfaces and models on their own, if you only need to talk to a viewer.
 
-## Keyboard Shortcuts
+## Docs and license
 
-| Shortcut | Action |
-|----------|--------|
-| `Ctrl+F` | Toggle search |
-| `F3` / `Enter` | Next match |
-| `Shift+F3` | Previous match |
-| `Esc` | Close search |
-| `Ctrl+Z` | Undo (edit mode) |
-| `Ctrl+Y` | Redo (edit mode) |
-
-## Documentation
-
-Full documentation: [jacobwi.github.io/Moka.Blazor.Json](https://jacobwi.github.io/Moka.Blazor.Json/)
-
-## Project Structure
-
-```
-src/
-  Moka.Blazor.Json/              # Main component library
-  Moka.Blazor.Json.Abstractions/ # Interfaces and models
-  Moka.Blazor.Json.AI/           # AI assistant panel (optional)
-  Moka.Blazor.Json.Diagnostics/  # Debug overlay for lazy parsing
-tests/
-  Moka.Blazor.Json.Tests/        # Unit + bUnit component tests
-  Moka.Blazor.Json.Benchmarks/   # Performance benchmarks
-samples/
-  Moka.Blazor.Json.Demo/         # Interactive demo application
-```
-
-## License
+Full docs are at [jacobwi.github.io/Moka.Blazor.Json](https://jacobwi.github.io/Moka.Blazor.Json/).
 
 MIT

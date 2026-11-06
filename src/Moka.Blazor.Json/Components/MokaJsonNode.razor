@@ -16,7 +16,17 @@
 	@* Indentation *@
 	<span class="moka-json-node-indent" style="width: @(Node.Depth * 20)px"></span>
 
-	@if (Node.IsClosingBracket)
+	@if (Node.IsRangeGroup)
+	{
+		<button class="moka-json-node-toggle @ToggleSizeCss"
+		        @onclick="HandleToggle"
+		        @onclick:stopPropagation="true"
+		        title="@(Node.IsExpanded ? "Collapse" : "Expand")">
+			@ToggleChar
+		</button>
+		<span class="moka-json-range">@($"[{Node.RangeStart:N0} ... {Node.RangeStart + Node.ChildCount - 1:N0}]")</span>
+	}
+	else if (Node.IsClosingBracket)
 	{
 		@* Closing bracket row *@
 		<span class="moka-json-node-toggle-placeholder @ToggleSizeCss"></span>
@@ -43,6 +53,7 @@
 			<span class="moka-json-node-toggle-placeholder @ToggleSizeCss"></span>
 		}
 
+		<span class="moka-json-node-content">
 		@* Property key *@
 		@if (IsEditingKey)
 		{
@@ -121,11 +132,17 @@
 		}
 		else
 		{
-			<span class="@ValueCssClass">@(Node.RawValue ?? "null")</span>
+			<span class="@ValueCssClass">@DisplayValue</span>
+			@if (HiddenCharacters > 0)
+			{
+				<span class="moka-json-value-more">@($"... {HiddenCharacters:N0} more characters")</span>
+			}
+
 			@if (Node.HasTrailingComma)
 			{
 				<span class="moka-json-comma">,</span>
 			}
 		}
+		</span>
 	}
 </div>

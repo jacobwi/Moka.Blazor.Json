@@ -58,6 +58,32 @@
     --moka-json-indent-guide: rgba(255, 255, 255, 0.06);
 }
 
+@media (prefers-color-scheme: dark) {
+    [data-moka-json-theme="auto"] {
+        --moka-json-bg: #1e1e1e;
+        --moka-json-color-key: #9cdcfe;
+        --moka-json-color-string: #ce9178;
+        --moka-json-color-number: #b5cea8;
+        --moka-json-color-boolean: #569cd6;
+        --moka-json-color-null: #808080;
+        --moka-json-color-bracket: #da70d6;
+
+        --moka-json-color-text: #d4d4d4;
+        --moka-json-color-border: #3e3e3e;
+        --moka-json-color-hover: rgba(255, 255, 255, 0.05);
+        --moka-json-color-selected: rgba(0, 120, 212, 0.2);
+        --moka-json-color-search-match: rgba(234, 192, 0, 0.3);
+        --moka-json-color-search-active: rgba(234, 128, 0, 0.5);
+        --moka-json-toolbar-bg: #252526;
+        --moka-json-context-bg: #2d2d2d;
+        --moka-json-context-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+        --moka-json-scrollbar-thumb: #424242;
+        --moka-json-error-color: #ef5350;
+        --moka-json-success-color: #66bb6a;
+        --moka-json-indent-guide: rgba(255, 255, 255, 0.06);
+    }
+}
+
 /* ---- Viewer Container ---- */
 .moka-json-viewer {
     font-family: var(--moka-json-font-family);
@@ -239,7 +265,23 @@
 /* ---- Word Wrap Mode ---- */
 .moka-json-viewer--word-wrap .moka-json-node {
     white-space: normal;
-    flex-wrap: wrap;
+}
+
+/* Key and value wrap together inside this block, which starts after the indent and toggle. */
+.moka-json-node-content {
+    display: contents;
+}
+
+.moka-json-viewer--word-wrap .moka-json-node-content {
+    display: block;
+    flex: 1;
+    min-width: 0;
+}
+
+.moka-json-value-more {
+    color: var(--moka-json-color-null);
+    font-style: italic;
+    margin-left: 4px;
 }
 
 .moka-json-viewer--word-wrap .moka-json-node .moka-json-key {
@@ -608,6 +650,39 @@
     gap: 8px;
     padding: 32px;
     color: var(--moka-json-color-null);
+}
+
+.moka-json-progress {
+    width: 160px;
+    height: 4px;
+    overflow: hidden;
+    border-radius: 2px;
+    background: var(--moka-json-color-border, #e0e0e0);
+}
+
+.moka-json-progress-bar {
+    display: block;
+    height: 100%;
+    background: var(--moka-json-color-key, #0451a5);
+}
+
+.moka-json-cancel {
+    padding: 2px 10px;
+    font: inherit;
+    cursor: pointer;
+    color: var(--moka-json-color-text, #1e1e1e);
+    background: transparent;
+    border: 1px solid var(--moka-json-color-border, #e0e0e0);
+    border-radius: 4px;
+}
+
+.moka-json-cancel:hover {
+    background: var(--moka-json-color-hover);
+}
+
+.moka-json-range {
+    color: var(--moka-json-color-null);
+    cursor: pointer;
 }
 
 /* ---- Inline Editor ---- */

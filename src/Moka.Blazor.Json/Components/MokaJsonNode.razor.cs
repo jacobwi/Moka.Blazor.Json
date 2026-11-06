@@ -176,6 +176,21 @@ public sealed partial class MokaJsonNode : ComponentBase
 		}
 	}
 
+	// One value can be many MB. Sending all of it to the page would stall the row for text nobody can read in
+	// place, and Copy Value still gets the whole thing.
+	private const int MaxDisplayedCharacters = 10_000;
+
+	private string DisplayValue
+	{
+		get
+		{
+			string value = Node.RawValue ?? "null";
+			return value.Length > MaxDisplayedCharacters ? value[..MaxDisplayedCharacters] : value;
+		}
+	}
+
+	private int HiddenCharacters => Math.Max(0, (Node.RawValue?.Length ?? 0) - MaxDisplayedCharacters);
+
 	private string ValueCssClass => Node.ValueKind switch
 	{
 		JsonValueKind.String => "moka-json-value--string",
@@ -233,7 +248,11 @@ public sealed partial class MokaJsonNode : ComponentBase
 
 	private async Task HandleClick(MouseEventArgs _)
 	{
-		if (!Node.IsClosingBracket)
+		if (Node.IsRangeGroup)
+		{
+			await OnToggle.InvokeAsync(Node.Path);
+		}
+		else if (!Node.IsClosingBracket)
 		{
 			await OnSelect.InvokeAsync(Node.Path);
 		}
@@ -241,7 +260,7 @@ public sealed partial class MokaJsonNode : ComponentBase
 
 	private async Task HandleContextMenu(MouseEventArgs e)
 	{
-		if (!Node.IsClosingBracket)
+		if (!Node.IsClosingBracket && !Node.IsRangeGroup)
 		{
 			await OnContextMenu.InvokeAsync((Node.Path, e.ClientX, e.ClientY));
 		}
@@ -249,7 +268,7 @@ public sealed partial class MokaJsonNode : ComponentBase
 
 	private async Task HandleDoubleClick(MouseEventArgs _)
 	{
-		if (!Node.IsClosingBracket)
+		if (!Node.IsClosingBracket && !Node.IsRangeGroup)
 		{
 			await OnDoubleClick.InvokeAsync(Node.Path);
 		}
@@ -260,7 +279,12 @@ public sealed partial class MokaJsonNode : ComponentBase
 		if (EditState is not null)
 		{
 			EditState.CurrentValue = e.Value?.ToString() ?? "";
-			EditState.ValidationError = null;
+
+			if (EditState.ValidationError is not null)
+			{
+				EditState.ValidationError = null;
+				_forceRender = true;
+			}
 		}
 	}
 
@@ -303,11 +327,13 @@ public sealed partial class MokaJsonNode : ComponentBase
 	private bool _previousShowChildCount;
 	private bool _previousReadOnly;
 	private InlineEditState? _previousEditState;
+	private bool _forceRender;
 
 	/// <inheritdoc />
 	protected override bool ShouldRender()
 	{
-		bool editStateChanged = EditState != _previousEditState;
+		bool editStateChanged = EditState != _previousEditState || _forceRender;
+		_forceRender = false;
 		if (Node != _previousNode || IsSelected != _previousIsSelected ||
 		    ShowLineNumbers != _previousShowLineNumbers ||
 		    ToggleStyle != _previousToggleStyle || ToggleSize != _previousToggleSize ||

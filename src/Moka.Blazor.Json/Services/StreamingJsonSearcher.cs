@@ -1,3 +1,5 @@
+using System.Buffers;
+using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -6,15 +8,13 @@ using Moka.Blazor.Json.Utilities;
 
 namespace Moka.Blazor.Json.Services;
 
-/// <summary>
-///     Searches raw UTF-8 JSON bytes using <see cref="Utf8JsonReader" /> without
-///     building a full DOM, suitable for very large documents.
-/// </summary>
+internal sealed record JsonSearchResult(IReadOnlyList<string> Paths, bool IsTruncated);
+
+// A path is only built for a match, so the scan allocates almost nothing however large the document is.
 internal static class StreamingJsonSearcher
 {
-	/// <summary>
-	///     Searches JSON bytes for matches, yielding matching JSON Pointer paths.
-	/// </summary>
+	private const int MaxCachedNames = 100_000;
+
 	public static async Task<List<string>> SearchAsync(
 		ReadOnlyMemory<byte> jsonBytes,
 		string query,
@@ -22,232 +22,371 @@ internal static class StreamingJsonSearcher
 		IProgress<SearchProgress>? progress = null,
 		CancellationToken cancellationToken = default)
 	{
+		using var bytes = new MemoryJsonByteSource(jsonBytes);
+		JsonSearchResult result = await SearchAsync(bytes, 0, jsonBytes.Length, "", query, options, int.MaxValue,
+			progress, cancellationToken).ConfigureAwait(false);
+		return [..result.Paths];
+	}
+
+	public static Task<JsonSearchResult> SearchAsync(
+		IJsonByteSource bytes,
+		long start,
+		long end,
+		string rootPath,
+		string query,
+		JsonSearchOptions? options,
+		int maxMatches,
+		IProgress<SearchProgress>? progress,
+		CancellationToken cancellationToken)
+	{
 		if (string.IsNullOrEmpty(query))
 		{
-			return [];
+			return Task.FromResult(new JsonSearchResult([], false));
 		}
 
-		return await Task.Run(() =>
+		return Task.Run(async () =>
 		{
 			try
 			{
-				return Search(jsonBytes.Span, query, options ?? new JsonSearchOptions(), progress,
-					jsonBytes.Length, cancellationToken);
+				var scanner = new Scanner(rootPath, query, options ?? new JsonSearchOptions(), maxMatches);
+				using var feeder = new JsonBlockFeeder(bytes, start, end, JsonIndexLimits.Default.BlockBytes);
+
+				while (true)
+				{
+					cancellationToken.ThrowIfCancellationRequested();
+
+					int consumed = scanner.ProcessBlock(feeder.Window.Span, feeder.IsFinal);
+					if (scanner.IsFull)
+					{
+						return new JsonSearchResult(scanner.Matches, true);
+					}
+
+					if (feeder.IsFinal)
+					{
+						progress?.Report(new SearchProgress(scanner.Matches.Count, end - start, end - start));
+						return new JsonSearchResult(scanner.Matches, false);
+					}
+
+					feeder.Advance(consumed);
+					progress?.Report(new SearchProgress(scanner.Matches.Count, feeder.WindowOffset - start, end - start));
+					await BrowserThread.YieldAsync().ConfigureAwait(false);
+				}
 			}
 			catch (RegexMatchTimeoutException)
 			{
-				return [];
-			}
-		}, cancellationToken).ConfigureAwait(false);
-	}
-
-	private static List<string> Search(
-		ReadOnlySpan<byte> jsonBytes,
-		string query,
-		JsonSearchOptions options,
-		IProgress<SearchProgress>? progress,
-		long totalBytes,
-		CancellationToken cancellationToken)
-	{
-		var matches = new List<string>();
-		var reader = new Utf8JsonReader(jsonBytes, new JsonReaderOptions
-		{
-			AllowTrailingCommas = true,
-			CommentHandling = JsonCommentHandling.Skip,
-			MaxDepth = 256
-		});
-
-		// Path tracking
-		var pathStack = new Stack<(string Segment, JsonValueKind ParentKind, int ChildIndex)>();
-		string? currentPropertyName = null;
-		int tokensProcessed = 0;
-
-		Regex? regex = null;
-		if (options.UseRegex)
-		{
-			RegexOptions regexOpts = RegexOptions.Compiled;
-			if (!options.CaseSensitive)
-			{
-				regexOpts |= RegexOptions.IgnoreCase;
-			}
-
-			try
-			{
-				regex = new Regex(query, regexOpts, TimeSpan.FromSeconds(1));
+				return new JsonSearchResult([], false);
 			}
 			catch (ArgumentException)
 			{
-				return matches;
+				return new JsonSearchResult([], false);
 			}
-		}
-
-		StringComparison comparison = options.CaseSensitive
-			? StringComparison.Ordinal
-			: StringComparison.OrdinalIgnoreCase;
-
-		while (reader.Read())
-		{
-			if (++tokensProcessed % 5000 == 0)
-			{
-				cancellationToken.ThrowIfCancellationRequested();
-				progress?.Report(new SearchProgress(matches.Count, reader.BytesConsumed, totalBytes));
-			}
-
-			switch (reader.TokenType)
-			{
-				case JsonTokenType.StartObject:
-				{
-					string path = BuildCurrentPath(pathStack, currentPropertyName);
-					pathStack.Push((path, JsonValueKind.Object, 0));
-					currentPropertyName = null;
-					break;
-				}
-
-				case JsonTokenType.StartArray:
-				{
-					string path = BuildCurrentPath(pathStack, currentPropertyName);
-					pathStack.Push((path, JsonValueKind.Array, 0));
-					currentPropertyName = null;
-					break;
-				}
-
-				case JsonTokenType.EndObject:
-				case JsonTokenType.EndArray:
-				{
-					if (pathStack.Count > 0)
-					{
-						pathStack.Pop();
-					}
-
-					// Increment parent's child index if parent is an array
-					IncrementParentArrayIndex(pathStack);
-					break;
-				}
-
-				case JsonTokenType.PropertyName:
-				{
-					currentPropertyName = reader.GetString();
-
-					// Check key match
-					if (options.SearchKeys && currentPropertyName is not null)
-					{
-						string keyPath = BuildCurrentPath(pathStack, currentPropertyName);
-						bool isMatch = regex is not null
-							? regex.IsMatch(currentPropertyName)
-							: currentPropertyName.Contains(query, comparison);
-
-						if (isMatch)
-						{
-							matches.Add(keyPath);
-						}
-					}
-
-					break;
-				}
-
-				case JsonTokenType.String:
-				{
-					if (options.SearchValues)
-					{
-						string? value = reader.GetString();
-						if (value is not null)
-						{
-							bool isMatch = regex is not null
-								? regex.IsMatch(value)
-								: value.Contains(query, comparison);
-
-							if (isMatch)
-							{
-								string path = BuildCurrentPath(pathStack, currentPropertyName);
-								matches.Add(path);
-							}
-						}
-					}
-
-					currentPropertyName = null;
-					IncrementParentArrayIndex(pathStack);
-					break;
-				}
-
-				case JsonTokenType.Number:
-				case JsonTokenType.True:
-				case JsonTokenType.False:
-				case JsonTokenType.Null:
-				{
-					if (options.SearchValues)
-					{
-						string valueText = reader.TokenType switch
-						{
-							JsonTokenType.True => "true",
-							JsonTokenType.False => "false",
-							JsonTokenType.Null => "null",
-							_ => Encoding.UTF8.GetString(
-								jsonBytes.Slice((int)reader.TokenStartIndex,
-									(int)(reader.BytesConsumed - reader.TokenStartIndex)))
-						};
-
-						bool isMatch = regex is not null
-							? regex.IsMatch(valueText)
-							: valueText.Contains(query, comparison);
-
-						if (isMatch)
-						{
-							string path = BuildCurrentPath(pathStack, currentPropertyName);
-							matches.Add(path);
-						}
-					}
-
-					currentPropertyName = null;
-					IncrementParentArrayIndex(pathStack);
-					break;
-				}
-			}
-		}
-
-		progress?.Report(new SearchProgress(matches.Count, totalBytes, totalBytes));
-		return matches;
+		}, cancellationToken);
 	}
 
-	private static string BuildCurrentPath(
-		Stack<(string Segment, JsonValueKind ParentKind, int ChildIndex)> pathStack,
-		string? propertyName)
-	{
-		if (pathStack.Count == 0)
-		{
-			return "";
-		}
-
-		(string parentPath, JsonValueKind parentKind, int childIndex) = pathStack.Peek();
-
-		if (parentKind == JsonValueKind.Object && propertyName is not null)
-		{
-			return $"{parentPath}/{JsonPointerHelper.EscapeSegment(propertyName)}";
-		}
-
-		if (parentKind == JsonValueKind.Array)
-		{
-			return $"{parentPath}/{childIndex}";
-		}
-
-		return parentPath;
-	}
-
-	private static void IncrementParentArrayIndex(
-		Stack<(string Segment, JsonValueKind ParentKind, int ChildIndex)> pathStack)
-	{
-		if (pathStack.Count > 0)
-		{
-			(string seg, JsonValueKind kind, int idx) = pathStack.Peek();
-			if (kind == JsonValueKind.Array)
-			{
-				pathStack.Pop();
-				pathStack.Push((seg, kind, idx + 1));
-			}
-		}
-	}
-
-	/// <summary>
-	///     Progress data reported during a streaming search.
-	/// </summary>
 	internal readonly record struct SearchProgress(int MatchCount, long BytesScanned, long TotalBytes);
+
+	private sealed class Scanner
+	{
+		private readonly StringBuilder _path = new();
+		private readonly List<OpenContainer> _open = [];
+		private readonly Dictionary<ulong, bool> _nameResults = [];
+		private readonly string _rootPath;
+		private readonly TextMatcher _matcher;
+		private readonly JsonSearchOptions _options;
+		private readonly int _maxMatches;
+		private JsonReaderState _state = new(JsonFormatting.LenientReader);
+		private string? _lastMatch;
+		private int _depth = -1;
+
+		public Scanner(string rootPath, string query, JsonSearchOptions options, int maxMatches)
+		{
+			_rootPath = rootPath;
+			_options = options;
+			_maxMatches = maxMatches;
+			_matcher = new TextMatcher(query, options);
+		}
+
+		public List<string> Matches { get; } = [];
+
+		public bool IsFull => Matches.Count >= _maxMatches;
+
+		public int ProcessBlock(ReadOnlySpan<byte> window, bool isFinal)
+		{
+			var reader = new Utf8JsonReader(window, isFinal, _state);
+
+			while (!IsFull && reader.Read())
+			{
+				switch (reader.TokenType)
+				{
+					case JsonTokenType.StartObject:
+						Open(false);
+						break;
+
+					case JsonTokenType.StartArray:
+						Open(true);
+						break;
+
+					case JsonTokenType.EndObject:
+					case JsonTokenType.EndArray:
+						_depth--;
+						AfterValue();
+						break;
+
+					case JsonTokenType.PropertyName:
+						_open[_depth].SetName(reader.ValueSpan, reader.ValueIsEscaped);
+						if (_options.SearchKeys && NameMatches(ref reader))
+						{
+							AddMatch();
+						}
+
+						break;
+
+					case JsonTokenType.String:
+						if (_options.SearchValues && _matcher.StringMatches(ref reader))
+						{
+							AddMatch();
+						}
+
+						AfterValue();
+						break;
+
+					case JsonTokenType.Number:
+						if (_options.SearchValues && _matcher.NumberMatches(reader.ValueSpan))
+						{
+							AddMatch();
+						}
+
+						AfterValue();
+						break;
+
+					case JsonTokenType.True:
+						if (_options.SearchValues && _matcher.MatchesTrue)
+						{
+							AddMatch();
+						}
+
+						AfterValue();
+						break;
+
+					case JsonTokenType.False:
+						if (_options.SearchValues && _matcher.MatchesFalse)
+						{
+							AddMatch();
+						}
+
+						AfterValue();
+						break;
+
+					case JsonTokenType.Null:
+						if (_options.SearchValues && _matcher.MatchesNull)
+						{
+							AddMatch();
+						}
+
+						AfterValue();
+						break;
+				}
+			}
+
+			_state = reader.CurrentState;
+			return (int)reader.BytesConsumed;
+		}
+
+		private void Open(bool isArray)
+		{
+			_depth++;
+			if (_depth == _open.Count)
+			{
+				_open.Add(new OpenContainer());
+			}
+
+			_open[_depth].Reset(isArray);
+		}
+
+		private void AfterValue()
+		{
+			if (_depth >= 0)
+			{
+				_open[_depth].Index++;
+			}
+		}
+
+		// Documents repeat a small set of property names millions of times, so each is only tested once.
+		private bool NameMatches(ref Utf8JsonReader reader)
+		{
+			if (reader.ValueIsEscaped)
+			{
+				return _matcher.StringMatches(ref reader);
+			}
+
+			ulong hash = JsonObjectReader.HashBytes(reader.ValueSpan);
+			if (_nameResults.TryGetValue(hash, out bool known))
+			{
+				return known;
+			}
+
+			bool matches = _matcher.StringMatches(ref reader);
+			if (_nameResults.Count < MaxCachedNames)
+			{
+				_nameResults.Add(hash, matches);
+			}
+
+			return matches;
+		}
+
+		private void AddMatch()
+		{
+			_path.Clear().Append(_rootPath);
+			for (int i = 0; i <= _depth; i++)
+			{
+				_path.Append('/');
+				_open[i].AppendSegment(_path);
+			}
+
+			string path = _path.ToString();
+
+			// A key and its value can both match; they are one row.
+			if (path != _lastMatch)
+			{
+				Matches.Add(path);
+				_lastMatch = path;
+			}
+		}
+	}
+
+	private sealed class OpenContainer
+	{
+		private bool _isArray;
+		private byte[] _name = new byte[64];
+		private int _nameLength;
+		private bool _nameIsEscaped;
+
+		public int Index { get; set; }
+
+		public void Reset(bool isArray)
+		{
+			_isArray = isArray;
+			Index = 0;
+			_nameLength = 0;
+		}
+
+		public void SetName(ReadOnlySpan<byte> name, bool isEscaped)
+		{
+			if (name.Length > _name.Length)
+			{
+				_name = new byte[name.Length * 2];
+			}
+
+			name.CopyTo(_name);
+			_nameLength = name.Length;
+			_nameIsEscaped = isEscaped;
+		}
+
+		public void AppendSegment(StringBuilder path)
+		{
+			if (_isArray)
+			{
+				path.Append(CultureInfo.InvariantCulture, $"{Index}");
+				return;
+			}
+
+			path.Append(JsonPointerHelper.EscapeSegment(DecodeName()));
+		}
+
+		private string DecodeName()
+		{
+			ReadOnlySpan<byte> name = _name.AsSpan(0, _nameLength);
+			if (!_nameIsEscaped)
+			{
+				return Encoding.UTF8.GetString(name);
+			}
+
+			byte[] quoted = new byte[name.Length + 2];
+			quoted[0] = (byte)'"';
+			name.CopyTo(quoted.AsSpan(1));
+			quoted[^1] = (byte)'"';
+
+			var reader = new Utf8JsonReader(quoted);
+			reader.Read();
+			return reader.GetString() ?? "";
+		}
+	}
+
+	private sealed class TextMatcher
+	{
+		private static readonly SearchValues<char> NumberCharacters = SearchValues.Create("0123456789+-.eE");
+
+		private readonly StringComparison _comparison;
+		private readonly bool _numbersCanMatch;
+		private readonly string _query;
+		private readonly Regex? _regex;
+		private char[] _chars = new char[1024];
+
+		public TextMatcher(string query, JsonSearchOptions options)
+		{
+			_query = query;
+			_comparison = options.CaseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+
+			if (options.UseRegex)
+			{
+				RegexOptions regexOptions = RegexOptions.CultureInvariant;
+				if (!options.CaseSensitive)
+				{
+					regexOptions |= RegexOptions.IgnoreCase;
+				}
+
+				_regex = new Regex(query, regexOptions, TimeSpan.FromSeconds(1));
+			}
+
+			_numbersCanMatch = _regex is not null || query.AsSpan().IndexOfAnyExcept(NumberCharacters) < 0;
+
+			MatchesTrue = Test("true");
+			MatchesFalse = Test("false");
+			MatchesNull = Test("null");
+		}
+
+		public bool MatchesTrue { get; }
+
+		public bool MatchesFalse { get; }
+
+		public bool MatchesNull { get; }
+
+		public bool NumberMatches(ReadOnlySpan<byte> number) => _numbersCanMatch && Test(Decode(number));
+
+		public bool StringMatches(ref Utf8JsonReader reader)
+		{
+			if (!reader.ValueIsEscaped)
+			{
+				return Test(Decode(reader.ValueSpan));
+			}
+
+			EnsureCapacity(reader.ValueSpan.Length);
+			try
+			{
+				return Test(_chars.AsSpan(0, reader.CopyString(_chars)));
+			}
+			catch (InvalidOperationException)
+			{
+				// An escape that isn't valid UTF-16, such as a lone surrogate, has no text to match.
+				return false;
+			}
+		}
+
+		private bool Test(ReadOnlySpan<char> text) =>
+			_regex?.IsMatch(text) ?? text.Contains(_query, _comparison);
+
+		private ReadOnlySpan<char> Decode(ReadOnlySpan<byte> utf8)
+		{
+			EnsureCapacity(utf8.Length);
+			return _chars.AsSpan(0, Encoding.UTF8.GetChars(utf8, _chars));
+		}
+
+		private void EnsureCapacity(int length)
+		{
+			if (length > _chars.Length)
+			{
+				_chars = new char[length * 2];
+			}
+		}
+	}
 }

@@ -28,12 +28,23 @@ internal static class JsonEditValidator
 	/// </summary>
 	public static string ToJsonLiteral(string input, JsonValueKind targetKind) => targetKind switch
 	{
-		JsonValueKind.String => JsonSerializer.Serialize(input),
+		JsonValueKind.String => ToJsonString(input),
 		JsonValueKind.Number => input.Trim(),
 		JsonValueKind.True or JsonValueKind.False => input == "true" ? "true" : "false",
-		JsonValueKind.Null => IsJson(input) ? input.Trim() : JsonSerializer.Serialize(input),
+		JsonValueKind.Null => IsJson(input) ? input.Trim() : ToJsonString(input),
 		_ => input
 	};
+
+	private static string ToJsonString(string input)
+	{
+		using var stream = new MemoryStream();
+		using (var writer = new Utf8JsonWriter(stream))
+		{
+			writer.WriteStringValue(input);
+		}
+
+		return System.Text.Encoding.UTF8.GetString(stream.GetBuffer(), 0, (int)stream.Length);
+	}
 
 	private static bool IsJsonNumber(string input)
 	{

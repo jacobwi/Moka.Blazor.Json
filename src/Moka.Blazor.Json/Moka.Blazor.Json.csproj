@@ -4,7 +4,7 @@
 		<TargetFrameworks>net9.0;net10.0</TargetFrameworks>
 		<IsPackable>true</IsPackable>
 		<PackageId>Moka.Blazor.Json</PackageId>
-		<Description>A high-performance, zero-dependency Blazor JSON viewer and editor component with virtualization, theming, and streaming support.</Description>
+		<Description>A JSON viewer and editor for Blazor that opens files of many GB without loading them into memory. Search, inline editing, themes and a custom right-click menu.</Description>
 		<PackageTags>blazor;json;viewer;editor;component;razor;tree;virtualization</PackageTags>
 		<PackageReadmeFile>README.nuget.md</PackageReadmeFile>
 		<!-- CA1848/CA1873: LoggerMessage perf - acceptable for debug logging.
@@ -14,10 +14,16 @@
          CA1822: Event handler methods referenced from Razor cannot be static. -->
 		<!-- CA1849: RefreshFlatNodes() sync path is intentionally used for small docs to avoid Task.Run overhead. -->
 		<NoWarn>$(NoWarn);CA1848;CA1849;CA1873;CA1721;CA2227;CA1002;CA1812;CA1822</NoWarn>
+		<IsTrimmable>true</IsTrimmable>
 	</PropertyGroup>
 
 	<ItemGroup>
-		<FrameworkReference Include="Microsoft.AspNetCore.App" />
+		<SupportedPlatform Include="browser" />
+	</ItemGroup>
+
+	<!-- Not FrameworkReference Microsoft.AspNetCore.App: it has no browser-wasm runtime pack, so WebAssembly apps can't build with it. -->
+	<ItemGroup>
+		<PackageReference Include="Microsoft.AspNetCore.Components.Web" />
 	</ItemGroup>
 
 	<ItemGroup>

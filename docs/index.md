@@ -25,7 +25,7 @@ builder.Services.AddMokaJsonViewer();
 
 ## Key Features
 
-- **Virtualized rendering** — handles documents up to 2 GB with lazy parsing and smooth scrolling
+- **Large files** - opens files of many GB without loading them into memory
 - **Inline editing** — double-click to edit values, rename keys, add/delete nodes with undo/redo
 - **Search** — plain text, regex, case-sensitive with match navigation
 - **Theming** — light, dark, auto, or fully custom via CSS variables
@@ -33,7 +33,7 @@ builder.Services.AddMokaJsonViewer();
 - **Lazy parsing** — documents over 50 MB use byte-offset indexing with on-demand subtree parsing
 - **Streaming search** — search large documents without loading the full DOM
 - **AI assistant** — optional AI chat panel for JSON analysis, summarization, and transformation
-- **Zero dependencies** — core library built on `System.Text.Json`
+- **No third-party packages** - built on `System.Text.Json`
 
 ## Packages
 

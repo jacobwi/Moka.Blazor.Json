@@ -1,0 +1,94 @@
+@page "/large-file"
+@implements IAsyncDisposable
+@using Microsoft.AspNetCore.Components.Forms
+@inject IWebHostEnvironment Environment
+
+<h1>Open a large file</h1>
+<p>
+	<a href="/">Back to the demo</a>.
+	A file is read on demand instead of being loaded into memory, so it can be many GB.
+</p>
+
+<div style="display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap;">
+	@if (Environment.IsDevelopment())
+	{
+		<input @bind="_path" placeholder="Path on the server, e.g. C:\data\big.json"
+		       aria-label="File path" style="width: 480px; padding: 4px 8px;"/>
+		<button @onclick="OpenPathAsync" style="padding: 4px 16px; cursor: pointer;">Open</button>
+		<span style="color: #666;">or upload:</span>
+	}
+	<InputFile OnChange="OpenUploadAsync" accept=".json"/>
+	<label style="display: flex; align-items: center; gap: 4px; font-size: 13px; cursor: pointer;">
+		<input type="checkbox" @bind="_showDiagnostics"/>
+		Diagnostics
+	</label>
+</div>
+
+@if (_error is not null)
+{
+	<p style="color: #c62828;">@_error</p>
+}
+
+@if (_stream is not null)
+{
+	<div style="position: relative;">
+		<MokaJsonViewer @ref="_viewer" JsonStream="@_stream" Height="calc(100vh - 220px)" ShowLineNumbers="true"/>
+		<Moka.Blazor.Json.Diagnostics.Components.MokaJsonDebugOverlay Viewer="_viewer" Enabled="_showDiagnostics"/>
+	</div>
+}
+
+@code {
+	private MokaJsonViewer? _viewer;
+	private Stream? _stream;
+	private string? _path;
+	private string? _error;
+	private bool _showDiagnostics;
+
+	private async Task OpenPathAsync()
+	{
+		_error = null;
+
+		// This page lets the browser open any file the server can read, so it only works in development.
+		if (!Environment.IsDevelopment() || string.IsNullOrWhiteSpace(_path))
+		{
+			return;
+		}
+
+		try
+		{
+			await ReplaceStreamAsync(new FileStream(_path.Trim().Trim('"'), FileMode.Open, FileAccess.Read, FileShare.Read,
+				1, FileOptions.RandomAccess));
+		}
+		catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or ArgumentException)
+		{
+			_error = ex.Message;
+		}
+	}
+
+	private async Task OpenUploadAsync(InputFileChangeEventArgs e)
+	{
+		_error = null;
+		await ReplaceStreamAsync(e.File.OpenReadStream(long.MaxValue));
+	}
+
+	private async Task ReplaceStreamAsync(Stream stream)
+	{
+		Stream? previous = _stream;
+		_stream = stream;
+		StateHasChanged();
+
+		if (previous is not null)
+		{
+			await Task.Yield();
+			await previous.DisposeAsync();
+		}
+	}
+
+	public async ValueTask DisposeAsync()
+	{
+		if (_stream is not null)
+		{
+			await _stream.DisposeAsync();
+		}
+	}
+}

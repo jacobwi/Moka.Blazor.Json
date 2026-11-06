@@ -1,8 +1,6 @@
 @namespace Moka.Blazor.Json.Components
 
-<HeadContent>
-	<link href="_content/Moka.Blazor.Json/css/moka-json.css" rel="stylesheet"/>
-</HeadContent>
+<link href="@Assets["_content/Moka.Blazor.Json/css/moka-json.css"]" rel="stylesheet"/>
 
 <div class="moka-json-viewer @(WordWrap ? "moka-json-viewer--word-wrap" : "")" @ref="_viewerRef" style="@ComputedStyle" tabindex="-1" @attributes="AdditionalAttributes"
      data-moka-json-theme="@ThemeAttribute"
@@ -23,20 +21,36 @@
 			<span class="moka-json-error-details">@_errorMessage</span>
 		</div>
 	}
+	else if (_loadCancelled)
+	{
+		<div class="moka-json-loading">Loading cancelled.</div>
+	}
 	else if (!_isLoaded && _isLoading)
 	{
 		<div class="moka-json-loading">
 			<span class="moka-json-busy-spinner"></span>
-			Loading...
+			<span>@LoadingText</span>
+			@if (_loadBytesTotal > 0)
+			{
+				<span class="moka-json-progress"><span class="moka-json-progress-bar" style="@LoadPercentStyle"></span></span>
+			}
+			@if (_loadBytesDone > 0)
+			{
+				<button class="moka-json-cancel" type="button" @onclick="CancelLoad">Cancel</button>
+			}
 		</div>
 	}
 	else if (_isLoaded)
 	{
-		@if (_isBusy)
+		@if (_isBusy || _isRefreshing)
 		{
 			<div class="moka-json-busy-overlay">
 				<span class="moka-json-busy-spinner"></span>
-				<span class="moka-json-busy-text">@_busyMessage</span>
+				<span class="moka-json-busy-text">@(_busyMessage ?? "Loading...")</span>
+				@if (_isBusy && _treeCts is not null)
+				{
+					<button class="moka-json-cancel" type="button" @onclick="CancelTreeOperationAsync">Cancel</button>
+				}
 			</div>
 		}
 
@@ -101,6 +115,8 @@
 			                       MatchCount="@_searchEngine.MatchCount"
 			                       ActiveMatchIndex="@_searchEngine.ActiveMatchIndex"
 			                       IsPending="@_searchStale"
+			                       ProgressPercent="@_searchPercent"
+			                       IsTruncated="@_searchTruncated"
 			                       CaseSensitive="@_searchCaseSensitive"
 			                       UseRegex="@_searchUseRegex"
 			                       OnQueryChanged="HandleSearchQueryChanged"

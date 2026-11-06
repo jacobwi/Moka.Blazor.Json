@@ -445,7 +445,7 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 	///     Counts all nodes in the document tree recursively.
 	/// </summary>
 	/// <returns>The total number of nodes.</returns>
-	public int CountNodes()
+	public long CountNodes()
 	{
 		if (_document is null)
 		{
@@ -481,12 +481,21 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			return string.Empty;
 		}
 
-		JsonWriterOptions options = JsonFormatting.Writer(indented);
 		using var stream = new MemoryStream();
-		using var writer = new Utf8JsonWriter(stream, options);
-		_document.RootElement.WriteTo(writer);
-		writer.Flush();
+		WriteJson(stream, indented);
 		return Encoding.UTF8.GetString(stream.GetBuffer(), 0, (int)stream.Length);
+	}
+
+	/// <inheritdoc />
+	public void WriteJson(Stream destination, bool indented = true)
+	{
+		if (_document is null)
+		{
+			return;
+		}
+
+		using var writer = new Utf8JsonWriter(destination, JsonFormatting.Writer(indented));
+		_document.RootElement.WriteTo(writer);
 	}
 
 	#endregion
@@ -498,27 +507,42 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 		JsonObjectReader.CountChildren(NavigateToElement(path), _mayHaveDuplicateKeys);
 
 	/// <inheritdoc />
-	public IEnumerable<JsonChildDescriptor> EnumerateChildren(string path)
+	public IEnumerable<JsonChildDescriptor> EnumerateChildren(string path) => EnumerateChildren(path, 0, int.MaxValue);
+
+	/// <inheritdoc />
+	public IEnumerable<JsonChildDescriptor> EnumerateChildren(string path, int start, int count)
 	{
 		JsonElement element = NavigateToElement(path);
+		long end = (long)start + count;
 
 		if (element.ValueKind == JsonValueKind.Object)
 		{
+			int i = 0;
 			foreach (KeyValuePair<string, JsonElement> prop in EnumerateProperties(element))
 			{
-				string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Key)}";
-				JsonElement value = prop.Value;
-				RememberContainer(childPath, value);
+				if (i >= end)
+				{
+					yield break;
+				}
 
-				yield return new JsonChildDescriptor(
-					childPath,
-					prop.Key,
-					null,
-					value.ValueKind,
-					value.ValueKind is JsonValueKind.Object or JsonValueKind.Array
-						? null
-						: GetPrimitiveRawValue(value),
-					JsonObjectReader.CountChildren(value, _mayHaveDuplicateKeys));
+				if (i >= start)
+				{
+					string childPath = $"{path}/{JsonPointerHelper.EscapeSegment(prop.Key)}";
+					JsonElement value = prop.Value;
+					RememberContainer(childPath, value);
+
+					yield return new JsonChildDescriptor(
+						childPath,
+						prop.Key,
+						null,
+						value.ValueKind,
+						value.ValueKind is JsonValueKind.Object or JsonValueKind.Array
+							? null
+							: GetPrimitiveRawValue(value),
+						JsonObjectReader.CountChildren(value, _mayHaveDuplicateKeys));
+				}
+
+				i++;
 			}
 		}
 		else if (element.ValueKind == JsonValueKind.Array)
@@ -526,23 +550,65 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 			int i = 0;
 			foreach (JsonElement item in element.EnumerateArray())
 			{
-				string childPath = $"{path}/{i}";
-				RememberContainer(childPath, item);
-				int childCount = JsonObjectReader.CountChildren(item, _mayHaveDuplicateKeys);
+				if (i >= end)
+				{
+					yield break;
+				}
 
-				yield return new JsonChildDescriptor(
-					childPath,
-					null,
-					i,
-					item.ValueKind,
-					item.ValueKind is JsonValueKind.Object or JsonValueKind.Array
-						? null
-						: GetPrimitiveRawValue(item),
-					childCount);
+				if (i >= start)
+				{
+					string childPath = $"{path}/{i}";
+					RememberContainer(childPath, item);
+
+					yield return new JsonChildDescriptor(
+						childPath,
+						null,
+						i,
+						item.ValueKind,
+						item.ValueKind is JsonValueKind.Object or JsonValueKind.Array
+							? null
+							: GetPrimitiveRawValue(item),
+						JsonObjectReader.CountChildren(item, _mayHaveDuplicateKeys));
+				}
+
 				i++;
 			}
 		}
 	}
+
+	/// <inheritdoc />
+	public int GetChildIndex(string path, string escapedSegment)
+	{
+		JsonElement element = NavigateToElement(path);
+		string segment = JsonPointerHelper.UnescapeSegment(escapedSegment);
+
+		if (element.ValueKind == JsonValueKind.Array)
+		{
+			return int.TryParse(segment, NumberStyles.None, CultureInfo.InvariantCulture, out int index) &&
+			       index < element.GetArrayLength()
+				? index
+				: -1;
+		}
+
+		if (element.ValueKind == JsonValueKind.Object)
+		{
+			int i = 0;
+			foreach (KeyValuePair<string, JsonElement> prop in EnumerateProperties(element))
+			{
+				if (string.Equals(prop.Key, segment, StringComparison.Ordinal))
+				{
+					return i;
+				}
+
+				i++;
+			}
+		}
+
+		return -1;
+	}
+
+	/// <inheritdoc />
+	public long GetByteLength(string path) => JsonMarshal.GetRawUtf8Value(NavigateToElement(path)).Length;
 
 	/// <inheritdoc />
 	public string? GetRawValue(string path)
@@ -633,9 +699,9 @@ internal sealed class JsonDocumentManager(ILogger<JsonDocumentManager> logger, I
 		};
 	}
 
-	private static int CountNodes(JsonElement element, bool dedupe)
+	private static long CountNodes(JsonElement element, bool dedupe)
 	{
-		int count = 1;
+		long count = 1;
 		switch (element.ValueKind)
 		{
 			case JsonValueKind.Object when dedupe:

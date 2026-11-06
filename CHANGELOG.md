@@ -1,5 +1,86 @@
 # Changelog
 
+## [0.7.0] - 2026-11-06
+
+### ⚡ Large files
+A file no longer has to fit in memory or in a single array. A seekable `JsonStream` over the lazy threshold is read on demand, so 2 GB is no longer a limit. Measured on a 5.6 GB file with 134 million nodes, which could not be opened before (release build, file already in the Windows file cache):
+
+| | |
+|---|---|
+| Open the file | 9.5 s |
+| Memory after opening | 42 MB (7 MB managed) |
+| Memory after expanding and searching | 165 MB |
+| Expand an array with 18,151 items (1.4 GB) | 9 ms |
+| Search the whole file | 9 s |
+| Longest browser frame during load, on a Debug build | 12 ms |
+
+- **New index.** It's built in one streaming pass that allocates almost nothing. It keeps only containers of 4 MB or more, so that file needs 61 entries. Smaller parts are parsed from disk when opened. Before, opening a depth-2 array parsed all of it (1.4 GB here), and the default depth opened it on load
+- **Load progress and Cancel.** Large loads show how far they've got and can be cancelled. Loads are also cancelled when the viewer is disposed or given a new document, instead of finishing and leaking
+- **Streaming search** for large documents, with progress. It stops at `MaxSearchMatches` and shows `10,000+`. Enter no longer restarts a search that's already running
+- **Forward-only streams** (`InputFile` uploads, network responses) used to skip the size limit and the switch to lazy mode, and failed past 2 GB. They're now copied to memory or a temp file first, with the limit enforced
+- **Expand All has a limit.** It stops after 1,000,000 rows, or 100,000 on a large document, opens the levels nearest the root first, says so, and can be cancelled. The first view of a large document leaves containers with over 1,000 children closed
+- **Arrays and objects with over 100,000 children open as groups**, such as `[0 ... 99,999]`. Search and `NavigateToAsync()` open the right group
+- Node count and max depth now show for large documents
+- The lazy cache has limits on subtrees and on rows, and diagnostics stay cheap however many parses a session does
+
+### ⚡ Responsiveness
+- A background flatten held a lock for its whole run, so a click on the UI thread could wait for it. It now works from a snapshot
+- Overlapping flattens could finish out of order and show an older tree. Stale results are dropped
+- Selecting a row, right-clicking, Copy and Export no longer do large work on the UI thread. Right-clicking used to build the node's whole text on the spot
+- A slow refresh shows a busy indicator after 150 ms
+- The viewport skips rendering when nothing it shows has changed, and starting an edit re-renders only that row
+- Keys the viewer doesn't handle no longer re-render it
+- `Virtualize` has the right item size from the first render
+- Rows show the first 10,000 characters of a very long value and say how many more there are. Copy Value still gets all of it
+- Undo history is capped at 256 MB as well as 50 steps. Fifty copies of a large document could hold several GB
+
+### 🐛 Fixed
+- **WebAssembly apps couldn't use the library at all.** `FrameworkReference Microsoft.AspNetCore.App` fails with NETSDK1082 on `browser-wasm`. The main and Diagnostics packages now reference `Microsoft.AspNetCore.Components.Web`. Checked by running a WebAssembly app in a browser and building a MAUI app for Android. `Moka.Blazor.Json.AI` still doesn't build for WebAssembly
+- **WebAssembly loads froze the page**, since `Task.Run` doesn't leave the UI thread there. Indexing and search now stop between blocks to let it paint, and the defaults are lower in the browser
+- **Wrapped values lost their indent.** In word-wrap mode a long value dropped to the far left of the row, under the line numbers. Key and value now wrap together at the row's indent
+- **Theme `Auto` was always light.** It now follows the system setting, in CSS, so it also works before JS runs
+- `DefaultTheme`, `DefaultExpandDepth` and `EnableEditMode` were never read. They work now
+- **The stylesheet needed a `HeadOutlet`** and took the place of the app's own `<HeadContent>`. The viewer now links it directly, using the fingerprinted path when available
+- **Static server rendering left the viewer hidden** for good, since the render that reveals it never ran
+- **Prerendering** no longer loads a stream or a large string, which held up the first response and used up forward-only streams
+- Inline edit errors never showed, because the row didn't see a change. They show now, and typing clears them
+- Editing a value over 16,000 characters could end a Blazor Server circuit through the 32 KB message limit. It now says the value is too long
+- Export sent the whole document through one interop call with no size check. It now streams, with a limit
+- "Sort Keys" was offered on large documents and did nothing. It's hidden there now
+- Context menu listeners no longer stay on the page after a lost circuit
+- A read error, such as a file changing while it's open, shows a message instead of ending the circuit
+
+### ✨ New
+- `MaxSearchMatches` and `MaxExportSizeBytes` options
+- `FlattenedJsonNode.IsRangeGroup` and `RangeStart`
+- The library is marked as trimmable, and no longer uses the reflection-based serializer
+
+### 🔧 Changed
+- `MaxDocumentSizeBytes` defaults to 1 TB, or 1 GB in WebAssembly
+- `LazyParsingThresholdBytes` defaults to 16 MB in WebAssembly
+- `MokaJsonNodeContext.RawValue` is empty for a node over 1 MB. Read it through the viewer if you need it
+- `GetJson()` throws `InvalidOperationException` on a document over 1 GB
+- `MokaJsonBottomBar.NodeCount` is a `long`
+- `BackgroundStatsThresholdBytes` is obsolete. Stats always run in the background
+- A seekable `JsonStream` over the threshold has to stay open while the viewer shows it, and isn't read from by anything else
+
+### 📦 Dependencies
+| Package | From | To |
+|---|---|---|
+| Microsoft.AspNetCore.Components.Web (net9.0) | 9.0.20 | 9.0.22 |
+| Microsoft.AspNetCore.Components.Web (net10.0) | 10.0.12 | 10.0.14 |
+| Moka.AI, Moka.Blazor.AI | 0.5.0 | 0.6.0 |
+| Markdig | 1.4.0 | 1.6.0 |
+| Microsoft.Extensions.AI.Abstractions, .OpenAI | 10.10.1 | 10.11.0 |
+| OllamaSharp | 5.5.0 | 5.5.2 |
+| bunit | 2.11.3 | 2.13.3 |
+| xunit.v3 | 4.0.1 | 4.0.2 |
+| xunit.runner.visualstudio | 4.0.0 | 4.0.1 |
+| Microsoft.NET.Test.Sdk | 18.10.1 | 18.11.0 |
+
+### 🧪 Tests
+- **381 tests** (up from 267). The lazy source is compared with the in-memory one at every node and for every search, from memory and from a stream, with index settings that force each code path
+
 ## [0.6.3] - 2026-11-04
 
 ### ⚡ Performance

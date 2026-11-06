@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using Moka.Blazor.Json.Services;
 using Xunit;
@@ -6,139 +7,202 @@ namespace Moka.Blazor.Json.Tests;
 
 public sealed class JsonStructuralIndexTests
 {
-	[Fact]
-	public async Task Build_SimpleObject_IndexesRootAndChildren()
+	private static readonly JsonIndexLimits Tiny = new()
 	{
-		byte[] json = """{"a":1,"b":"hello","c":true}"""u8.ToArray();
+		BlockBytes = 16,
+		IndexedContainerBytes = 32,
+		AlwaysListedChildren = 2,
+		MaxListedChildren = 8,
+		MinBytesPerListedChild = 8,
+		CheckpointBytes = 32,
+		CheckpointChildren = 4
+	};
 
-		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(json);
+	private static Task<JsonStructuralIndex> BuildAsync(string json, JsonIndexLimits? limits = null) =>
+		JsonStructuralIndex.BuildAsync(new MemoryJsonByteSource(Encoding.UTF8.GetBytes(json)), 0, limits);
 
-		Assert.True(index.TryGetEntry("", out JsonStructuralIndex.IndexEntry root));
-		Assert.Equal(JsonValueKind.Object, root.ValueKind);
-		Assert.Equal(3, root.ChildCount);
+	[Fact]
+	public async Task Root_Is_Always_Indexed_With_Its_Children()
+	{
+		JsonStructuralIndex index = await BuildAsync("""{"a":1,"b":"hello","c":true}""");
+
+		Assert.NotNull(index.Root);
+		Assert.Equal(JsonValueKind.Object, index.Root.Kind);
+		Assert.Equal(3, index.Root.ChildCount);
+		Assert.Equal(["a", "b", "c"], index.Root.Children!.Select(c => c.Name));
+		Assert.Equal(
+			[JsonValueKind.Number, JsonValueKind.String, JsonValueKind.True],
+			index.Root.Children!.Select(c => c.Kind));
 	}
 
 	[Fact]
-	public async Task Build_SimpleArray_IndexesRootAndElements()
+	public async Task Root_Primitive_Has_No_Container()
 	{
-		byte[] json = """[1,2,3]"""u8.ToArray();
+		JsonStructuralIndex index = await BuildAsync(" 42 ");
 
-		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(json);
-
-		Assert.True(index.TryGetEntry("", out JsonStructuralIndex.IndexEntry root));
-		Assert.Equal(JsonValueKind.Array, root.ValueKind);
-		Assert.Equal(3, root.ChildCount);
+		Assert.Null(index.Root);
+		Assert.Equal(JsonValueKind.Number, index.RootValue.Kind);
+		Assert.Equal(1, index.RootValue.Start);
+		Assert.Equal(3, index.RootValue.End);
 	}
 
 	[Fact]
-	public async Task Build_NestedObject_IndexesFirstLevel()
+	public async Task Counts_Nodes_And_Depth_Across_The_Whole_Document()
 	{
-		byte[] json = """{"user":{"name":"Alice","age":30},"count":1}"""u8.ToArray();
+		JsonStructuralIndex index = await BuildAsync("""{"a":[1,{"b":null}],"c":2}""");
 
-		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(json);
-
-		// Root should be indexed with 2 children
-		Assert.True(index.TryGetEntry("", out JsonStructuralIndex.IndexEntry root));
-		Assert.Equal(2, root.ChildCount);
-
-		// /user should be indexed (it's at depth 1, within limit)
-		Assert.True(index.TryGetEntry("/user", out JsonStructuralIndex.IndexEntry user));
-		Assert.Equal(JsonValueKind.Object, user.ValueKind);
-
-		// Primitives are read from their parent, not indexed
-		Assert.False(index.TryGetEntry("/count", out _));
+		Assert.Equal(6, index.NodeCount);
+		Assert.Equal(3, index.MaxDepth);
 	}
 
 	[Fact]
-	public async Task Build_DeeplyNested_SkipsBeyondLimit()
+	public async Task Small_Containers_Are_Not_Indexed()
 	{
-		byte[] json = """{"a":{"b":{"c":{"d":1}}}}"""u8.ToArray();
+		JsonStructuralIndex index = await BuildAsync("""{"user":{"name":"Alice"},"count":1}""");
 
-		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(json);
-
-		// /a should be indexed
-		Assert.True(index.TryGetEntry("/a", out JsonStructuralIndex.IndexEntry a));
-		Assert.Equal(JsonValueKind.Object, a.ValueKind);
-
-		// /a/b should be indexed but with ChildCount=-1 (beyond eager limit)
-		Assert.True(index.TryGetEntry("/a/b", out JsonStructuralIndex.IndexEntry b));
-		Assert.Equal(JsonValueKind.Object, b.ValueKind);
-		Assert.Equal(-1, b.ChildCount); // Not eagerly indexed
+		Assert.Equal(1, index.EntryCount);
+		IndexedChild user = index.Root!.Children![0];
+		Assert.Equal(1, user.ChildCount);
+		Assert.False(index.TryGetContainer(user.Start, out _));
 	}
 
 	[Fact]
-	public async Task Build_Indexes_Only_Containers()
+	public async Task Containers_Over_The_Limit_Are_Indexed_At_Any_Depth()
 	{
-		byte[] json = """{"a":1,"b":2,"c":{"d":3}}"""u8.ToArray();
+		string big = new('x', 64);
+		JsonStructuralIndex index = await BuildAsync("""{"a":{"b":{"c":"BIG"}},"small":{"d":1}}""".Replace("BIG", big),
+			new JsonIndexLimits { IndexedContainerBytes = 32 });
 
-		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(json);
+		IndexedChild a = index.Root!.Children![0];
+		Assert.True(index.TryGetContainer(a.Start, out IndexedContainer? indexedA));
+		IndexedChild b = indexedA.Children![0];
+		Assert.True(index.TryGetContainer(b.Start, out _));
 
-		Assert.True(index.TryGetEntry("", out JsonStructuralIndex.IndexEntry root));
-		Assert.Equal(3, root.ChildCount);
-		Assert.True(index.TryGetEntry("/c", out _));
-		Assert.Equal(2, index.EntryCount);
+		IndexedChild small = index.Root.Children[1];
+		Assert.False(index.TryGetContainer(small.Start, out _));
 	}
 
 	[Fact]
-	public async Task IndexChildren_Indexes_Deep_Containers_And_Records_The_Count()
+	public async Task Many_Small_Children_Use_Checkpoints_Instead_Of_A_List()
 	{
-		byte[] json = """{"a":{"x":1,"y":{"z":2}}}"""u8.ToArray();
+		string numbers = string.Join(',', Enumerable.Range(0, 100));
+		JsonStructuralIndex index = await BuildAsync($"[{numbers}]", Tiny);
 
-		// Only index depth 0
-		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(json, 0);
-
-		// /a is indexed but children unknown
-		Assert.True(index.TryGetEntry("/a", out JsonStructuralIndex.IndexEntry a));
-		Assert.Equal(-1, a.ChildCount);
-
-		Assert.Equal(2, index.IndexChildren("/a", json));
-
-		Assert.True(index.TryGetEntry("/a", out a));
-		Assert.Equal(2, a.ChildCount);
-		Assert.True(index.TryGetEntry("/a/y", out JsonStructuralIndex.IndexEntry y));
-		Assert.Equal(JsonValueKind.Object, y.ValueKind);
-		Assert.False(index.TryGetEntry("/a/x", out _));
+		Assert.Null(index.Root!.Children);
+		Assert.Equal(100, index.Root.ChildCount);
+		Assert.Equal(0, index.Root.CheckpointIndexes[0]);
+		Assert.All(index.Root.CheckpointIndexes.Zip(index.Root.CheckpointIndexes.Skip(1)),
+			pair => Assert.True(pair.Second - pair.First <= Tiny.CheckpointChildren));
 	}
 
 	[Fact]
-	public async Task Repeated_Key_Replaces_An_Earlier_Container()
+	public async Task Child_After_An_Indexed_Child_Always_Has_A_Checkpoint()
 	{
-		byte[] json = """{"a":{"b":{"c":1}},"a":5}"""u8.ToArray();
+		string big = string.Join(',', Enumerable.Range(0, 50).Select(i => $"\"{i}\""));
+		string small = string.Join(',', Enumerable.Range(0, 20));
+		JsonStructuralIndex index = await BuildAsync($"[{small},[{big}],{small}]", Tiny);
 
-		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(json);
-
-		Assert.False(index.TryGetEntry("/a", out _));
-		Assert.False(index.TryGetEntry("/a/b", out _));
+		Assert.Null(index.Root!.Children);
+		Assert.Contains(21, index.Root.CheckpointIndexes);
 	}
 
 	[Fact]
-	public async Task Build_OffsetsCoverValidJson()
+	public async Task Offsets_Point_At_The_Value()
 	{
-		byte[] json = """{"name":"Alice"}"""u8.ToArray();
+		const string json = """{  "name" : "Alice" , "list" : [1, 2]  }""";
+		JsonStructuralIndex index = await BuildAsync(json);
 
-		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(json);
+		IndexedChild name = index.Root!.Children![0];
+		IndexedChild list = index.Root.Children[1];
 
-		Assert.True(index.TryGetEntry("", out JsonStructuralIndex.IndexEntry root));
-
-		// The root entry should span the whole document
-		ReadOnlyMemory<byte> slice = json.AsMemory((int)root.StartOffset, (int)(root.EndOffset - root.StartOffset));
-		using var doc = JsonDocument.Parse(slice);
-		Assert.Equal(JsonValueKind.Object, doc.RootElement.ValueKind);
+		Assert.Equal("\"Alice\"", json[(int)name.Start..(int)name.End]);
+		Assert.Equal("[1, 2]", json[(int)list.Start..(int)list.End]);
+		Assert.Equal(json.Length, (int)index.Root.End);
 	}
 
 	[Fact]
-	public async Task Build_ArrayWithObjects()
+	public async Task Escaped_Property_Names_Are_Decoded()
 	{
-		byte[] json = """[{"id":1},{"id":2}]"""u8.ToArray();
+		JsonStructuralIndex index = await BuildAsync("""{"a\"b":1,"café":2}""");
 
-		JsonStructuralIndex index = await JsonStructuralIndex.BuildAsync(json);
+		Assert.Equal(["a\"b", "café"], index.Root!.Children!.Select(c => c.Name));
+		Assert.False(index.MayHaveDuplicateKeys);
+	}
 
-		Assert.True(index.TryGetEntry("", out JsonStructuralIndex.IndexEntry root));
-		Assert.Equal(JsonValueKind.Array, root.ValueKind);
-		Assert.Equal(2, root.ChildCount);
+	[Theory]
+	[InlineData("""{"a":1,"b":{"a":2},"c":[{"a":1,"b":2}]}""", false)]
+	[InlineData("""{"a":1,"b":2,"a":3}""", true)]
+	[InlineData("""[{"x":1},{"y":{"k":1,"k":2}}]""", true)]
+	[InlineData("""{"a":1,"a":2}""", true)]
+	public async Task Detects_Repeated_Keys(string json, bool expected)
+	{
+		JsonStructuralIndex index = await BuildAsync(json);
 
-		// Array elements at depth 1
-		Assert.True(index.TryGetEntry("/0", out JsonStructuralIndex.IndexEntry first));
-		Assert.Equal(JsonValueKind.Object, first.ValueKind);
+		Assert.Equal(expected, index.MayHaveDuplicateKeys);
+	}
+
+	[Fact]
+	public async Task Detects_A_Repeated_Key_In_An_Object_With_Many_Keys()
+	{
+		string keys = string.Join(',', Enumerable.Range(0, 40).Select(i => $"\"k{i}\":{i}"));
+
+		Assert.False((await BuildAsync($"{{{keys}}}")).MayHaveDuplicateKeys);
+		Assert.True((await BuildAsync($"{{{keys},\"k30\":0}}")).MayHaveDuplicateKeys);
+	}
+
+	[Fact]
+	public async Task A_Repeated_Key_Keeps_Its_First_Position_And_Last_Value()
+	{
+		JsonStructuralIndex index = await BuildAsync("""{"a":{"b":{"c":1}},"x":1,"a":5}""");
+
+		Assert.Equal(2, index.Root!.ChildCount);
+		Assert.Equal(["a", "x"], index.Root.Children!.Select(c => c.Name));
+		Assert.Equal(JsonValueKind.Number, index.Root.Children![0].Kind);
+	}
+
+	[Fact]
+	public async Task A_Token_Larger_Than_A_Block_Still_Fits()
+	{
+		string text = new('z', 5000);
+		JsonStructuralIndex index = await BuildAsync($$"""{"long":"{{text}}","next":1}""",
+			new JsonIndexLimits { BlockBytes = 64 });
+
+		Assert.Equal(2, index.Root!.ChildCount);
+		Assert.Equal(text.Length + 2, index.Root.Children![0].End - index.Root.Children[0].Start);
+	}
+
+	[Theory]
+	[InlineData("""{"a":1""")]
+	[InlineData("""{"a":}""")]
+	[InlineData("""[1,2] 3""")]
+	[InlineData("")]
+	public async Task Invalid_Json_Throws(string json)
+	{
+		// Thrown as a subtype of JsonException, which Assert.ThrowsAsync wouldn't accept.
+		await Assert.ThrowsAnyAsync<JsonException>(() => BuildAsync(json, new JsonIndexLimits { BlockBytes = 4 }));
+	}
+
+	[Fact]
+	public async Task Cancellation_Stops_The_Scan()
+	{
+		using var cts = new CancellationTokenSource();
+		await cts.CancelAsync();
+
+		await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+			JsonStructuralIndex.BuildAsync(new MemoryJsonByteSource("[1,2,3]"u8.ToArray()),
+				cancellationToken: cts.Token));
+	}
+
+	[Fact]
+	public async Task Reports_Progress_Between_Blocks()
+	{
+		var offsets = new List<long>();
+		string numbers = string.Join(',', Enumerable.Range(0, 200));
+
+		await JsonStructuralIndex.BuildAsync(new MemoryJsonByteSource(Encoding.UTF8.GetBytes($"[{numbers}]")), 0,
+			new JsonIndexLimits { BlockBytes = 64 }, offsets.Add);
+
+		Assert.NotEmpty(offsets);
+		Assert.Equal(offsets.Order(), offsets);
 	}
 }

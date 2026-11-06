@@ -23,11 +23,11 @@
 	<span class="moka-json-search-info">
 		@if (IsPending && !string.IsNullOrEmpty(Query))
 		{
-			<span>Searching...</span>
+			<span>@(ProgressPercent >= 0 ? $"Searching... {ProgressPercent}%" : "Searching...")</span>
 		}
 		else if (MatchCount > 0)
 		{
-			@($"{ActiveMatchIndex + 1} of {MatchCount}")
+			@($"{ActiveMatchIndex + 1} of {MatchCount:N0}{(IsTruncated ? "+" : "")}")
 		}
 		else if (!string.IsNullOrEmpty(Query))
 		{

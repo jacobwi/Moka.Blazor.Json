@@ -10,7 +10,7 @@ title: "Getting Started"
 dotnet add package Moka.Blazor.Json
 ```
 
-The package targets .NET 9 and .NET 10. It uses `FrameworkReference` so it will not force specific package versions on your project.
+The package targets .NET 9 and .NET 10, and works in Blazor Server, WebAssembly and MAUI Hybrid.
 
 ## Register Services
 

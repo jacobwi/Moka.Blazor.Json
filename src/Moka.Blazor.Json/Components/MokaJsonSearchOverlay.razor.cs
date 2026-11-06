@@ -65,6 +65,18 @@ public sealed partial class MokaJsonSearchOverlay : ComponentBase
 	[Parameter]
 	public bool IsPending { get; set; }
 
+	/// <summary>
+	///     How far a running search has got, or -1 if it isn't known.
+	/// </summary>
+	[Parameter]
+	public int ProgressPercent { get; set; } = -1;
+
+	/// <summary>
+	///     Whether the search stopped at its match limit, so there may be more matches than shown.
+	/// </summary>
+	[Parameter]
+	public bool IsTruncated { get; set; }
+
 	/// <summary>Whether case-sensitive search is active.</summary>
 	[Parameter]
 	public bool CaseSensitive { get; set; }

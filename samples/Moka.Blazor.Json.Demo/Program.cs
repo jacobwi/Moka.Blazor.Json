@@ -11,7 +11,7 @@ builder.Services.AddMokaJsonViewer(options =>
 {
 	options.DefaultExpandDepth = 2;
 	options.EnableEditMode = true;
-	options.MaxDocumentSizeBytes = 1024L * 1024 * 1024; // 1 GB for stress testing
+
 });
 
 builder.Services.AddMokaJsonAi(options =>

@@ -22,4 +22,17 @@ public sealed class InlineEditState
 	public string CurrentValue { get; set; } = "";
 	public string? ValidationError { get; set; }
 	public JsonValueKind ValueKind { get; init; }
+
+	/// <summary>
+	///     Copies this state with a validation error. Rows re-render when they get a new instance.
+	/// </summary>
+	public InlineEditState WithError(string error) => new()
+	{
+		Path = Path,
+		Target = Target,
+		OriginalValue = OriginalValue,
+		CurrentValue = CurrentValue,
+		ValueKind = ValueKind,
+		ValidationError = error
+	};
 }

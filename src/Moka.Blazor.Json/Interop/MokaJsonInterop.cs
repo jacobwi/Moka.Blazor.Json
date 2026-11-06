@@ -109,14 +109,14 @@ internal sealed class MokaJsonInterop(IJSRuntime jsRuntime) : IAsyncDisposable
 		await module.InvokeVoidAsync("focusAndSelectInput", cancellationToken, elementId).ConfigureAwait(false);
 	}
 
-	/// <summary>
-	///     Downloads a string as a file via the browser.
-	/// </summary>
-	public async ValueTask DownloadFileAsync(string fileName, string content,
+	// The stream crosses interop in chunks, so it isn't limited by the size of a single message on Blazor Server.
+	public async ValueTask DownloadFileAsync(string fileName, Stream content,
 		CancellationToken cancellationToken = default)
 	{
 		IJSObjectReference module = await GetModuleAsync().ConfigureAwait(false);
-		await module.InvokeVoidAsync("downloadFile", cancellationToken, fileName, content).ConfigureAwait(false);
+		using var streamReference = new DotNetStreamReference(content);
+		await module.InvokeVoidAsync("downloadFile", cancellationToken, fileName, streamReference)
+			.ConfigureAwait(false);
 	}
 
 	#endregion

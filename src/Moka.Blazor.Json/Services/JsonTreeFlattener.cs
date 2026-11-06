@@ -1,23 +1,43 @@
+using System.Globalization;
 using System.Text.Json;
 using Moka.Blazor.Json.Models;
 using Moka.Blazor.Json.Utilities;
 
 namespace Moka.Blazor.Json.Services;
 
+// Without a row limit, a document with a hundred million nodes would hold a hundred million rows in memory.
+internal sealed record JsonExpandLimits(int MaxRows, int MaxChildren = int.MaxValue)
+{
+	public static readonly JsonExpandLimits Default = new(1_000_000);
+
+	public static readonly JsonExpandLimits LargeDocument = new(100_000);
+
+	public static readonly JsonExpandLimits LargeDocumentFirstView = new(100_000, 1_000);
+}
+
 /// <summary>
 ///     Flattens a <see cref="JsonElement" /> tree into a list of <see cref="FlattenedJsonNode" />
 ///     for virtualized rendering. Only expands nodes that are marked as expanded.
 /// </summary>
-internal sealed class JsonTreeFlattener
+internal sealed class JsonTreeFlattener(int groupSize = JsonTreeFlattener.DefaultGroupSize)
 {
 	#region Fields
 
-	// Flatten and ExpandAll run on background threads while UI event handlers mutate
-	// expand/search state; HashSet is not safe for a concurrent reader and writer.
+	// Containers with more children than this show them as collapsed groups, so opening one costs a handful of
+	// rows. It also keeps the list well under the height browsers can scroll (about 1.5 million rows).
+	public const int DefaultGroupSize = 100_000;
+
+	private const char GroupKeySeparator = '\u001F';
+
+	// Flatten and ExpandAll run on background threads while UI event handlers mutate expand/search state, and
+	// HashSet is not safe for a concurrent reader and writer. Flatten can read from disk, so it works from a
+	// snapshot rather than holding the lock and blocking a click on the UI thread.
 	private readonly Lock _gate = new();
-	private readonly HashSet<string> _expandedPaths = new(StringComparer.Ordinal);
+	private HashSet<string> _expandedPaths = new(StringComparer.Ordinal);
+	private HashSet<string>? _expandedSnapshot;
 	private HashSet<string> _searchMatchPaths = new(StringComparer.Ordinal);
 	private string? _activeSearchMatchPath;
+	private int _lastRowCount;
 
 	#endregion
 
@@ -50,6 +70,7 @@ internal sealed class JsonTreeFlattener
 	{
 		lock (_gate)
 		{
+			_expandedSnapshot = null;
 			_expandedPaths.Clear();
 			if (maxDepth != 0)
 			{
@@ -67,6 +88,7 @@ internal sealed class JsonTreeFlattener
 	{
 		lock (_gate)
 		{
+			_expandedSnapshot = null;
 			if (!_expandedPaths.Remove(path))
 			{
 				_expandedPaths.Add(path);
@@ -84,6 +106,7 @@ internal sealed class JsonTreeFlattener
 	{
 		lock (_gate)
 		{
+			_expandedSnapshot = null;
 			_expandedPaths.Add(path);
 		}
 	}
@@ -96,6 +119,7 @@ internal sealed class JsonTreeFlattener
 	{
 		lock (_gate)
 		{
+			_expandedSnapshot = null;
 			_expandedPaths.Add("");
 
 			int slash = path.Length > 1 ? path.IndexOf('/', 1) : -1;
@@ -114,6 +138,7 @@ internal sealed class JsonTreeFlattener
 	{
 		lock (_gate)
 		{
+			_expandedSnapshot = null;
 			_expandedPaths.Remove(path);
 		}
 	}
@@ -124,9 +149,12 @@ internal sealed class JsonTreeFlattener
 	public void CollapseSubtree(string path)
 	{
 		string prefix = path + "/";
+		string groupPrefix = path + GroupKeySeparator;
 		lock (_gate)
 		{
-			_expandedPaths.RemoveWhere(p => p == path || p.StartsWith(prefix, StringComparison.Ordinal));
+			_expandedSnapshot = null;
+			_expandedPaths.RemoveWhere(p => p == path || p.StartsWith(prefix, StringComparison.Ordinal) ||
+			                                p.StartsWith(groupPrefix, StringComparison.Ordinal));
 		}
 	}
 
@@ -137,6 +165,7 @@ internal sealed class JsonTreeFlattener
 	{
 		lock (_gate)
 		{
+			_expandedSnapshot = null;
 			_expandedPaths.Clear();
 		}
 	}
@@ -148,6 +177,7 @@ internal sealed class JsonTreeFlattener
 	{
 		lock (_gate)
 		{
+			_expandedSnapshot = null;
 			_expandedPaths.Clear();
 			_expandedPaths.UnionWith(paths);
 		}
@@ -159,36 +189,122 @@ internal sealed class JsonTreeFlattener
 	/// <param name="root">The root element.</param>
 	public void ExpandAll(JsonElement root) => ExpandToDepth(root, -1);
 
-	/// <summary>
-	///     Sets which paths are expanded based on depth, using an <see cref="IJsonDocumentSource" />.
-	/// </summary>
-	public void ExpandToDepth(IJsonDocumentSource source, int maxDepth)
+	// The expand methods return true if the limits stopped them early.
+	public bool ExpandToDepth(IJsonDocumentSource source, int maxDepth, JsonExpandLimits? limits = null,
+		CancellationToken cancellationToken = default)
 	{
+		bool truncated = false;
+		HashSet<string> expanded = maxDepth == 0
+			? new HashSet<string>(StringComparer.Ordinal)
+			: CollectExpansions(source, "", source.RootValueKind, maxDepth, limits ?? JsonExpandLimits.Default,
+				out truncated, cancellationToken);
+
 		lock (_gate)
 		{
-			_expandedPaths.Clear();
-			if (maxDepth != 0)
+			_expandedSnapshot = null;
+			_expandedPaths = expanded;
+		}
+
+		return truncated;
+	}
+
+	public bool ExpandAll(IJsonDocumentSource source, JsonExpandLimits? limits = null,
+		CancellationToken cancellationToken = default) =>
+		ExpandToDepth(source, -1, limits, cancellationToken);
+
+	public bool ExpandSubtree(IJsonDocumentSource source, string path, JsonExpandLimits? limits = null,
+		CancellationToken cancellationToken = default)
+	{
+		HashSet<string> expanded = CollectExpansions(source, path, source.GetValueKind(path), -1,
+			limits ?? JsonExpandLimits.Default, out bool truncated, cancellationToken);
+
+		lock (_gate)
+		{
+			_expandedSnapshot = null;
+			_expandedPaths.UnionWith(expanded);
+		}
+
+		return truncated;
+	}
+
+	public void RevealPath(IJsonDocumentSource source, string path)
+	{
+		ExpandAncestors(path);
+
+		for (int slash = path.Length > 0 ? path.IndexOf('/', 0) : -1; slash >= 0;)
+		{
+			int next = path.IndexOf('/', slash + 1);
+			string parent = path[..slash];
+
+			if (source.GetChildCount(parent) > groupSize)
 			{
-				ExpandToDepthRecursive(source, "", source.RootValueKind, 0, maxDepth);
+				string segment = next < 0 ? path[(slash + 1)..] : path[(slash + 1)..next];
+				int index = source.GetChildIndex(parent, segment);
+				if (index >= 0)
+				{
+					Expand(GroupKey(parent, index / groupSize * groupSize));
+				}
+			}
+
+			slash = next;
+		}
+	}
+
+	private HashSet<string> CollectExpansions(IJsonDocumentSource source, string rootPath, JsonValueKind rootKind,
+		int maxDepth, JsonExpandLimits limits, out bool truncated, CancellationToken cancellationToken)
+	{
+		truncated = false;
+		var expanded = new HashSet<string>(StringComparer.Ordinal);
+		if (rootKind is not (JsonValueKind.Object or JsonValueKind.Array))
+		{
+			return expanded;
+		}
+
+		// Nearest the root first, so hitting the row limit leaves the top of the tree open rather than one
+		// branch opened all the way down.
+		var pending = new Queue<(string Path, int ChildCount, int Depth)>();
+		pending.Enqueue((rootPath, source.GetChildCount(rootPath), 0));
+		long rows = 1;
+
+		while (pending.TryDequeue(out (string Path, int ChildCount, int Depth) item))
+		{
+			cancellationToken.ThrowIfCancellationRequested();
+
+			if (item.Depth > 0 && item.ChildCount > limits.MaxChildren)
+			{
+				continue;
+			}
+
+			bool grouped = item.ChildCount > groupSize;
+			long addedRows = (grouped ? (item.ChildCount + (long)groupSize - 1) / groupSize : item.ChildCount) + 1;
+			if (rows + addedRows > limits.MaxRows)
+			{
+				truncated = true;
+				break;
+			}
+
+			expanded.Add(item.Path);
+			rows += addedRows;
+
+			if (grouped || (maxDepth >= 0 && item.Depth >= maxDepth))
+			{
+				continue;
+			}
+
+			foreach (JsonChildDescriptor child in source.EnumerateChildren(item.Path))
+			{
+				if (child.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
+				{
+					pending.Enqueue((child.Path, child.ChildCount, item.Depth + 1));
+				}
 			}
 		}
+
+		return expanded;
 	}
 
-	/// <summary>
-	///     Expands all nodes using an <see cref="IJsonDocumentSource" />.
-	/// </summary>
-	public void ExpandAll(IJsonDocumentSource source) => ExpandToDepth(source, -1);
-
-	/// <summary>
-	///     Expands the container at <paramref name="path" /> and every container below it.
-	/// </summary>
-	public void ExpandSubtree(IJsonDocumentSource source, string path)
-	{
-		lock (_gate)
-		{
-			ExpandToDepthRecursive(source, path, source.GetValueKind(path), 0, -1);
-		}
-	}
+	private static string GroupKey(string path, int start) =>
+		string.Create(CultureInfo.InvariantCulture, $"{path}{GroupKeySeparator}{start}");
 
 	#endregion
 
@@ -280,13 +396,11 @@ internal sealed class JsonTreeFlattener
 	public List<FlattenedJsonNode> Flatten(IJsonDocumentSource source)
 	{
 		int nextId = 0;
-		var result = new List<FlattenedJsonNode>();
-		lock (_gate)
-		{
-			FlattenFromSource(ref nextId, source, "", null, null, source.RootValueKind, null,
-				source.GetChildCount(""), 0, false, result);
-		}
-
+		FlattenState state = TakeState();
+		var result = new List<FlattenedJsonNode>(_lastRowCount);
+		FlattenFromSource(ref nextId, source, state, "", null, null, source.RootValueKind, null,
+			source.GetChildCount(""), 0, false, result);
+		_lastRowCount = result.Count;
 		return result;
 	}
 
@@ -296,16 +410,28 @@ internal sealed class JsonTreeFlattener
 	public List<FlattenedJsonNode> FlattenScoped(IJsonDocumentSource source, string scopedPath)
 	{
 		int nextId = 0;
-		var result = new List<FlattenedJsonNode>();
+		FlattenState state = TakeState();
+		var result = new List<FlattenedJsonNode>(_lastRowCount);
 		JsonValueKind kind = source.GetValueKind(scopedPath);
 		int childCount = source.GetChildCount(scopedPath);
-		lock (_gate)
-		{
-			FlattenFromSource(ref nextId, source, scopedPath, null, null, kind, null, childCount, 0, false, result);
-		}
-
+		FlattenFromSource(ref nextId, source, state, scopedPath, null, null, kind, null, childCount, 0, false, result);
+		_lastRowCount = result.Count;
 		return result;
 	}
+
+	private FlattenState TakeState()
+	{
+		lock (_gate)
+		{
+			_expandedSnapshot ??= new HashSet<string>(_expandedPaths, StringComparer.Ordinal);
+			return new FlattenState(_expandedSnapshot, _searchMatchPaths, _activeSearchMatchPath);
+		}
+	}
+
+	private readonly record struct FlattenState(
+		HashSet<string> Expanded,
+		HashSet<string> SearchMatches,
+		string? ActiveSearchMatch);
 
 	#endregion
 
@@ -442,33 +568,10 @@ internal sealed class JsonTreeFlattener
 		}
 	}
 
-	private void ExpandToDepthRecursive(IJsonDocumentSource source, string path, JsonValueKind kind,
-		int currentDepth, int maxDepth)
-	{
-		if (kind is not (JsonValueKind.Object or JsonValueKind.Array))
-		{
-			return;
-		}
-
-		_expandedPaths.Add(path);
-
-		if (maxDepth >= 0 && currentDepth >= maxDepth)
-		{
-			return;
-		}
-
-		foreach (JsonChildDescriptor child in source.EnumerateChildren(path))
-		{
-			if (child.ValueKind is JsonValueKind.Object or JsonValueKind.Array)
-			{
-				ExpandToDepthRecursive(source, child.Path, child.ValueKind, currentDepth + 1, maxDepth);
-			}
-		}
-	}
-
 	private void FlattenFromSource(
 		ref int nextId,
 		IJsonDocumentSource source,
+		FlattenState state,
 		string path,
 		string? propertyName,
 		int? arrayIndex,
@@ -481,9 +584,9 @@ internal sealed class JsonTreeFlattener
 	{
 		int id = nextId++;
 		bool isContainer = valueKind is JsonValueKind.Object or JsonValueKind.Array;
-		bool isExpanded = isContainer && _expandedPaths.Contains(path);
+		bool isExpanded = isContainer && state.Expanded.Contains(path);
 
-		var node = new FlattenedJsonNode
+		result.Add(new FlattenedJsonNode
 		{
 			Id = id,
 			Path = path,
@@ -495,25 +598,46 @@ internal sealed class JsonTreeFlattener
 			ArrayIndex = arrayIndex ?? -1,
 			IsExpanded = isExpanded,
 			IsClosingBracket = false,
-			IsSearchMatch = _searchMatchPaths.Contains(path),
-			IsActiveSearchMatch = _activeSearchMatchPath == path,
+			IsSearchMatch = state.SearchMatches.Contains(path),
+			IsActiveSearchMatch = state.ActiveSearchMatch == path,
 			HasTrailingComma = hasTrailingComma
-		};
-
-		result.Add(node);
+		});
 
 		if (!isContainer || !isExpanded)
 		{
 			return;
 		}
 
-		int i = 0;
-		foreach (JsonChildDescriptor child in source.EnumerateChildren(path))
+		if (childCount > groupSize)
 		{
-			bool isLast = i == childCount - 1;
-			FlattenFromSource(ref nextId, source, child.Path, child.PropertyName, child.ArrayIndex,
-				child.ValueKind, child.RawValue, child.ChildCount, depth + 1, !isLast, result);
-			i++;
+			for (int start = 0; start < childCount; start += groupSize)
+			{
+				int count = Math.Min(groupSize, childCount - start);
+				string key = GroupKey(path, start);
+				bool isOpen = state.Expanded.Contains(key);
+
+				result.Add(new FlattenedJsonNode
+				{
+					Id = nextId++,
+					Path = key,
+					Depth = depth + 1,
+					ValueKind = valueKind,
+					ChildCount = count,
+					IsExpanded = isOpen,
+					HasTrailingComma = false,
+					IsRangeGroup = true,
+					RangeStart = start
+				});
+
+				if (isOpen)
+				{
+					FlattenChildren(ref nextId, source, state, path, start, count, childCount, depth + 2, result);
+				}
+			}
+		}
+		else
+		{
+			FlattenChildren(ref nextId, source, state, path, 0, childCount, childCount, depth + 1, result);
 		}
 
 		// Add closing bracket
@@ -530,6 +654,18 @@ internal sealed class JsonTreeFlattener
 			IsClosingBracket = true,
 			HasTrailingComma = hasTrailingComma
 		});
+	}
+
+	private void FlattenChildren(ref int nextId, IJsonDocumentSource source, FlattenState state, string path,
+		int start, int count, int totalChildren, int depth, List<FlattenedJsonNode> result)
+	{
+		int position = start;
+		foreach (JsonChildDescriptor child in source.EnumerateChildren(path, start, count))
+		{
+			FlattenFromSource(ref nextId, source, state, child.Path, child.PropertyName, child.ArrayIndex,
+				child.ValueKind, child.RawValue, child.ChildCount, depth, position < totalChildren - 1, result);
+			position++;
+		}
 	}
 
 	#endregion

@@ -26,9 +26,9 @@
   </Folder>
   <Folder Name="/src/">
     <Project Path="src/Moka.Blazor.Json.Abstractions/Moka.Blazor.Json.Abstractions.csproj" />
-    <Project Path="src/Moka.Blazor.Json/Moka.Blazor.Json.csproj" />
-    <Project Path="src/Moka.Blazor.Json.Diagnostics/Moka.Blazor.Json.Diagnostics.csproj" />
     <Project Path="src/Moka.Blazor.Json.AI/Moka.Blazor.Json.AI.csproj" />
+    <Project Path="src/Moka.Blazor.Json.Diagnostics/Moka.Blazor.Json.Diagnostics.csproj" />
+    <Project Path="src/Moka.Blazor.Json/Moka.Blazor.Json.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Moka.Blazor.Json.Benchmarks/Moka.Blazor.Json.Benchmarks.csproj" />

@@ -3,6 +3,15 @@
  * Handles clipboard, scroll, context menu positioning, and DOM measurements.
  */
 
+const listeners = new Map();
+let nextListenerId = 1;
+
+function addListener(entry) {
+    const id = nextListenerId++;
+    listeners.set(id, entry);
+    return id;
+}
+
 /**
  * Copies text to the clipboard.
  * @param {string} text
@@ -158,22 +167,21 @@ export function positionContextMenu(menuId, clientX, clientY) {
  * @returns {number} listener ID for cleanup
  */
 export function addContextMenuDismissListener(dotNetRef, menuId) {
+    let id = 0;
     const handler = (e) => {
         const menu = document.getElementById(menuId);
-        if (menu && !menu.contains(e.target)) {
-            dotNetRef.invokeMethodAsync('DismissContextMenu');
+        if (!menu) {
+            // The component is gone without getting to clean up, as happens when a circuit is lost.
+            removeContextMenuDismissListener(id);
+            return;
+        }
+        if (!menu.contains(e.target)) {
+            dotNetRef.invokeMethodAsync('DismissContextMenu').catch(() => removeContextMenuDismissListener(id));
         }
     };
     document.addEventListener('click', handler);
     document.addEventListener('contextmenu', handler);
-
-    // Store for cleanup using small incrementing counter (must fit in Int32)
-    if (!window.__mokaJsonHandlers) {
-        window.__mokaJsonHandlers = new Map();
-        window.__mokaJsonNextId = 1;
-    }
-    const id = window.__mokaJsonNextId++;
-    window.__mokaJsonHandlers.set(id, handler);
+    id = addListener(handler);
     return id;
 }
 
@@ -182,12 +190,11 @@ export function addContextMenuDismissListener(dotNetRef, menuId) {
  * @param {number} handlerId
  */
 export function removeContextMenuDismissListener(handlerId) {
-    if (!window.__mokaJsonHandlers) return;
-    const handler = window.__mokaJsonHandlers.get(handlerId);
+    const handler = listeners.get(handlerId);
     if (handler) {
         document.removeEventListener('click', handler);
         document.removeEventListener('contextmenu', handler);
-        window.__mokaJsonHandlers.delete(handlerId);
+        listeners.delete(handlerId);
     }
 }
 
@@ -209,15 +216,7 @@ export function addColorSchemeListener(dotNetRef) {
         dotNetRef.invokeMethodAsync('OnColorSchemeChanged', e.matches ? 'dark' : 'light');
     };
     mq.addEventListener('change', handler);
-
-    // Store for cleanup using shared incrementing counter (must fit in Int32)
-    if (!window.__mokaJsonHandlers) {
-        window.__mokaJsonHandlers = new Map();
-        window.__mokaJsonNextId = 1;
-    }
-    const id = window.__mokaJsonNextId++;
-    window.__mokaJsonHandlers.set(id, { mq, handler });
-    return id;
+    return addListener({ mq, handler });
 }
 
 /**
@@ -225,11 +224,10 @@ export function addColorSchemeListener(dotNetRef) {
  * @param {number} handlerId
  */
 export function removeColorSchemeListener(handlerId) {
-    if (!window.__mokaJsonHandlers) return;
-    const entry = window.__mokaJsonHandlers.get(handlerId);
+    const entry = listeners.get(handlerId);
     if (entry) {
         entry.mq.removeEventListener('change', entry.handler);
-        window.__mokaJsonHandlers.delete(handlerId);
+        listeners.delete(handlerId);
     }
 }
 
@@ -258,12 +256,12 @@ export function focusAndSelectInput(elementId) {
 }
 
 /**
- * Downloads a string as a file via the browser.
+ * Saves a stream from .NET as a file via the browser.
  * @param {string} fileName - The file name for the download.
- * @param {string} content - The file content.
+ * @param {object} contentStream - A DotNetStreamReference.
  */
-export function downloadFile(fileName, content) {
-    const blob = new Blob([content], { type: 'application/json' });
+export async function downloadFile(fileName, contentStream) {
+    const blob = new Blob([await contentStream.arrayBuffer()], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;

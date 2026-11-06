@@ -124,10 +124,10 @@ public sealed class LazyJsonDocumentSourceTests : IAsyncLifetime
 	}
 
 	[Fact]
-	public void CountNodes_ReturnsNegativeOne() => Assert.Equal(-1, _source!.CountNodes());
+	public void CountNodes_CountsTheWholeDocument() => Assert.Equal(9, _source!.CountNodes());
 
 	[Fact]
-	public void GetMaxDepth_ReturnsNegativeOne() => Assert.Equal(-1, _source!.GetMaxDepth());
+	public void GetMaxDepth_FindsTheDeepestNode() => Assert.Equal(2, _source!.GetMaxDepth());
 
 	[Fact]
 	public async Task CreateFromString_LargeJson_Works()

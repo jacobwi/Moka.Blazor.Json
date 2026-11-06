@@ -14,10 +14,12 @@ builder.Services.AddMokaJsonViewer(options =>
     options.DefaultTheme = MokaJsonTheme.Dark;
     options.DefaultToolbarMode = MokaJsonToolbarMode.IconAndText;
     options.DefaultExpandDepth = 3;
-    options.MaxDocumentSizeBytes = 2L * 1024 * 1024 * 1024; // 2 GB
+    options.MaxDocumentSizeBytes = 100L * 1024 * 1024 * 1024; // 100 GB
     options.SearchDebounceMs = 300;
     options.LazyParsingThresholdBytes = 50 * 1024 * 1024; // 50 MB
     options.MaxClipboardSizeBytes = 100 * 1024 * 1024; // 100 MB
+    options.MaxExportSizeBytes = 512 * 1024 * 1024; // 512 MB
+    options.MaxSearchMatches = 10_000;
     options.ShowSettingsButton = true;
 });
 ```
@@ -29,12 +31,13 @@ builder.Services.AddMokaJsonViewer(options =>
 | `DefaultTheme` | `MokaJsonTheme` | `Auto` | Default theme for all viewer instances |
 | `DefaultToolbarMode` | `MokaJsonToolbarMode` | `IconAndText` | Default toolbar display mode (Text, Icon, or IconAndText) |
 | `DefaultExpandDepth` | `int` | `2` | Default depth to expand on load |
-| `MaxDocumentSizeBytes` | `long` | 2 GB | Maximum document size accepted |
+| `MaxDocumentSizeBytes` | `long` | 1 TB (1 GB in WebAssembly) | Maximum document size accepted |
 | `EnableEditMode` | `bool` | `true` | Whether edit mode is available |
 | `SearchDebounceMs` | `int` | `250` | Debounce delay for search input |
-| `LazyParsingThresholdBytes` | `long` | 50 MB | Size threshold for lazy/indexed parsing |
-| `BackgroundStatsThresholdBytes` | `long` | 10 MB | Size threshold for background stats calculation |
+| `LazyParsingThresholdBytes` | `long` | 50 MB (16 MB in WebAssembly) | Documents over this open in large file mode and are read-only |
 | `MaxClipboardSizeBytes` | `long` | 50 MB | Maximum size for clipboard copy |
+| `MaxExportSizeBytes` | `long` | 512 MB | Maximum document size for the Export button |
+| `MaxSearchMatches` | `int` | `10,000` | Search of a large document stops after this many matches |
 | `ShowSettingsButton` | `bool` | `true` | Whether the settings gear icon is shown in the toolbar |
 | `AggressiveCleanup` | `bool` | `false` | Forces full GC + LOH compaction when the viewer is disposed |
 

@@ -85,8 +85,7 @@ public sealed class LazyDebugStats
 				MaxParseTime = duration;
 			}
 
-			InsertSorted(new ParsedRegion(startOffset, startOffset + length));
-			RecalculateUniqueCoverage();
+			AddRegion(new ParsedRegion(startOffset, startOffset + length));
 
 			if (RecentParses.Count >= 20)
 			{
@@ -106,17 +105,14 @@ public sealed class LazyDebugStats
 	/// <summary>Records a lazy index operation.</summary>
 	public void RecordLazyIndex() => Interlocked.Increment(ref _lazyIndexOps);
 
-	/// <summary>
-	///     Inserts a region in sorted order by Start offset using binary search.
-	///     Avoids re-sorting the entire list on every parse operation.
-	/// </summary>
-	private void InsertSorted(ParsedRegion region)
+	// Keeps the covered regions sorted and merged, so a long session stays cheap to record.
+	private void AddRegion(ParsedRegion region)
 	{
 		int lo = 0, hi = _parsedRegions.Count;
 		while (lo < hi)
 		{
 			int mid = (lo + hi) / 2;
-			if (_parsedRegions[mid].Start <= region.Start)
+			if (_parsedRegions[mid].End < region.Start)
 			{
 				lo = mid + 1;
 			}
@@ -126,38 +122,20 @@ public sealed class LazyDebugStats
 			}
 		}
 
-		_parsedRegions.Insert(lo, region);
-	}
-
-	private void RecalculateUniqueCoverage()
-	{
-		if (_parsedRegions.Count == 0)
+		int first = lo;
+		long start = region.Start;
+		long end = region.End;
+		while (lo < _parsedRegions.Count && _parsedRegions[lo].Start <= end)
 		{
-			UniqueBytesParsed = 0;
-			return;
+			start = Math.Min(start, _parsedRegions[lo].Start);
+			end = Math.Max(end, _parsedRegions[lo].End);
+			UniqueBytesParsed -= _parsedRegions[lo].End - _parsedRegions[lo].Start;
+			lo++;
 		}
 
-		// _parsedRegions is maintained in sorted order by InsertSorted
-		long uniqueBytes = 0;
-		long mergedStart = _parsedRegions[0].Start;
-		long mergedEnd = _parsedRegions[0].End;
-
-		for (int i = 1; i < _parsedRegions.Count; i++)
-		{
-			if (_parsedRegions[i].Start <= mergedEnd)
-			{
-				mergedEnd = Math.Max(mergedEnd, _parsedRegions[i].End);
-			}
-			else
-			{
-				uniqueBytes += mergedEnd - mergedStart;
-				mergedStart = _parsedRegions[i].Start;
-				mergedEnd = _parsedRegions[i].End;
-			}
-		}
-
-		uniqueBytes += mergedEnd - mergedStart;
-		UniqueBytesParsed = uniqueBytes;
+		_parsedRegions.RemoveRange(first, lo - first);
+		_parsedRegions.Insert(first, new ParsedRegion(start, end));
+		UniqueBytesParsed += end - start;
 	}
 
 	private readonly record struct ParsedRegion(long Start, long End);

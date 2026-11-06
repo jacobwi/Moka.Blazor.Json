@@ -6,7 +6,7 @@
     <!-- CA1707: Test method naming convention uses underscores.
          CA1001: Not applicable for test code. -->
     <!-- xUnit1051: Test code uses default CancellationToken — acceptable for unit tests. -->
-    <NoWarn>$(NoWarn);CA1707;CA1001;xUnit1051</NoWarn>
+    <NoWarn>$(NoWarn);CA1707;CA1001;xUnit1051;CA2000;CA1062</NoWarn>
   </PropertyGroup>
 
   <ItemGroup>

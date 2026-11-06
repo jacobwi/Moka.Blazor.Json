@@ -5,36 +5,36 @@
 
 	<!-- ASP.NET / Extensions packages — net9.0 (default) -->
 	<ItemGroup Condition="'$(TargetFramework)' == 'net9.0'">
-		<PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="9.0.20" />
-		<PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.20" />
-		<PackageVersion Include="Microsoft.Extensions.Options" Version="9.0.20" />
-		<PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="9.0.20" />
+		<PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="9.0.22" />
+		<PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+		<PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.14" />
+		<PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
 	</ItemGroup>
 
 	<!-- ASP.NET / Extensions packages — net10.0 -->
 	<ItemGroup Condition="'$(TargetFramework)' == 'net10.0'">
-		<PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.12" />
-		<PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.12" />
-		<PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.12" />
-		<PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.12" />
+		<PackageVersion Include="Microsoft.AspNetCore.Components.Web" Version="10.0.14" />
+		<PackageVersion Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.14" />
+		<PackageVersion Include="Microsoft.Extensions.Options" Version="10.0.14" />
+		<PackageVersion Include="Microsoft.Extensions.Logging.Abstractions" Version="10.0.14" />
 	</ItemGroup>
 
 	<!-- AI plugin dependencies -->
 	<ItemGroup>
-		<PackageVersion Include="Moka.AI" Version="0.5.0" />
-		<PackageVersion Include="Moka.Blazor.AI" Version="0.5.0" />
-		<PackageVersion Include="Markdig" Version="1.4.0" />
-		<PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.10.1" />
-		<PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.10.1" />
-		<PackageVersion Include="OllamaSharp" Version="5.5.0" />
+		<PackageVersion Include="Moka.AI" Version="0.6.0" />
+		<PackageVersion Include="Moka.Blazor.AI" Version="0.6.0" />
+		<PackageVersion Include="Markdig" Version="1.6.0" />
+		<PackageVersion Include="Microsoft.Extensions.AI.Abstractions" Version="10.11.0" />
+		<PackageVersion Include="Microsoft.Extensions.AI.OpenAI" Version="10.11.0" />
+		<PackageVersion Include="OllamaSharp" Version="5.5.2" />
 	</ItemGroup>
 
 	<!-- Test dependencies -->
 	<ItemGroup>
-		<PackageVersion Include="bunit" Version="2.11.3" />
-		<PackageVersion Include="xunit.v3" Version="4.0.1" />
-		<PackageVersion Include="xunit.runner.visualstudio" Version="4.0.0" />
-		<PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.10.1" />
+		<PackageVersion Include="bunit" Version="2.13.3" />
+		<PackageVersion Include="xunit.v3" Version="4.0.2" />
+		<PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />
+		<PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.11.0" />
 		<PackageVersion Include="BenchmarkDotNet" Version="0.15.8" />
 	</ItemGroup>
 </Project>

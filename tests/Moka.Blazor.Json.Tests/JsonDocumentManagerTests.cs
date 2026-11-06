@@ -58,7 +58,7 @@ public sealed class JsonDocumentManagerTests : IAsyncDisposable
 
 		// root object + a + 1 + b + array + 2 + 3 = 5 (root + a:1 + b:[2,3])
 		// Object{a:1, b:Array[2,3]} => root(1) + a(1) + b(1) + 2(1) + 3(1) = 5
-		int count = _manager.CountNodes();
+		long count = _manager.CountNodes();
 		Assert.Equal(5, count);
 	}
 

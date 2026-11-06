@@ -76,4 +76,15 @@ public readonly record struct FlattenedJsonNode()
 	///     Whether a comma should be rendered after this node (i.e., it is not the last sibling).
 	/// </summary>
 	public required bool HasTrailingComma { get; init; }
+
+	/// <summary>
+	///     Whether this row groups a run of a large container's children rather than being a JSON node.
+	///     <see cref="ChildCount" /> is how many it holds and <see cref="Path" /> is not a JSON Pointer.
+	/// </summary>
+	public bool IsRangeGroup { get; init; }
+
+	/// <summary>
+	///     The position of the first child in this group, when <see cref="IsRangeGroup" /> is set.
+	/// </summary>
+	public int RangeStart { get; init; }
 }

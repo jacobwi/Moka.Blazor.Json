@@ -14,7 +14,7 @@ public sealed partial class MokaJsonBottomBar : ComponentBase
 
 	/// <summary>Total number of nodes in the document.</summary>
 	[Parameter]
-	public int NodeCount { get; set; }
+	public long NodeCount { get; set; }
 
 	/// <summary>The depth of the currently selected node.</summary>
 	[Parameter]

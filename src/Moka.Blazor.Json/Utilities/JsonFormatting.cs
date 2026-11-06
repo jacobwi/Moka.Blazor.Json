@@ -16,6 +16,13 @@ internal static class JsonFormatting
 		MaxDepth = 256
 	};
 
+	public static readonly JsonReaderOptions LenientReader = new()
+	{
+		AllowTrailingCommas = true,
+		CommentHandling = JsonCommentHandling.Skip,
+		MaxDepth = 256
+	};
+
 	public static readonly JsonSerializerOptions IndentedSerializer = new()
 	{
 		WriteIndented = true,
