@@ -33,7 +33,7 @@ The file is never loaded whole, so its size isn't limited by memory or by the 2 
 ### What's different in large file mode
 
 - The document is read-only.
-- The first view leaves containers with more than 1,000 children closed.
+- The first view opens at most 2,000 rows, and leaves containers with more than 1,000 children closed.
 - Expand All stops after 100,000 rows, nearest the root first, and tells the user. It can be cancelled.
 - Search scans the bytes directly and shows progress. It stops at `MaxSearchMatches` (10,000) and shows `10,000+`.
 - A value over 1 GB can't be loaded whole. Copy and Export refuse anything over `MaxClipboardSizeBytes` and `MaxExportSizeBytes` before they try.

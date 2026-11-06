@@ -12,7 +12,9 @@ internal sealed record JsonExpandLimits(int MaxRows, int MaxChildren = int.MaxVa
 
 	public static readonly JsonExpandLimits LargeDocument = new(100_000);
 
-	public static readonly JsonExpandLimits LargeDocumentFirstView = new(100_000, 1_000);
+	// Opening a small container in a large document means reading and parsing it, so nobody should wait for
+	// thousands of those before seeing anything.
+	public static readonly JsonExpandLimits LargeDocumentFirstView = new(2_000, 1_000);
 }
 
 /// <summary>
@@ -277,7 +279,7 @@ internal sealed class JsonTreeFlattener(int groupSize = JsonTreeFlattener.Defaul
 
 			bool grouped = item.ChildCount > groupSize;
 			long addedRows = (grouped ? (item.ChildCount + (long)groupSize - 1) / groupSize : item.ChildCount) + 1;
-			if (rows + addedRows > limits.MaxRows)
+			if (item.Depth > 0 && rows + addedRows > limits.MaxRows)
 			{
 				truncated = true;
 				break;

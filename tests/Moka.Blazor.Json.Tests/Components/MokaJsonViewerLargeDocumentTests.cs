@@ -245,14 +245,20 @@ public sealed class MokaJsonViewerLargeDocumentTests : IAsyncLifetime
 	public async Task Expand_All_On_A_Huge_Document_Stops_At_The_Limit_And_Says_So()
 	{
 		UseOptions();
-		string objects = string.Join(',', Enumerable.Range(0, 60_000).Select(i => $"{{\"a\":{i},\"b\":{{\"c\":1}}}}"));
+
+		// bUnit's Virtualize reports a huge viewport, so without this every one of the 100,000 rows becomes markup.
+		_ctx.ComponentFactories.AddStub<MokaJsonNode>();
+
+		string properties = string.Join(',', Enumerable.Range(0, 200).Select(i => $"\"k{i}\":{i}"));
+		string objects = string.Join(',', Enumerable.Repeat($"{{{properties}}}", 1000));
 		using MemoryStream stream = ToStream($"[{objects}]");
-		IRenderedComponent<MokaJsonViewer> cut = RenderLoaded(p => p.Add(v => v.JsonStream, stream));
+		IRenderedComponent<MokaJsonViewer> cut = _ctx.Render<MokaJsonViewer>(p => p.Add(v => v.JsonStream, stream));
+		cut.WaitForState(() => cut.FindAll(".moka-json-bottom-bar").Count > 0, Timeout);
 
 		await cut.InvokeAsync(() => cut.Instance.ExpandAllAsync().AsTask());
 
 		cut.WaitForAssertion(() => Assert.Contains("too large to expand fully", cut.Find(".moka-json-toast").TextContent),
-			TimeSpan.FromSeconds(60));
+			Timeout);
 	}
 
 	[Fact]

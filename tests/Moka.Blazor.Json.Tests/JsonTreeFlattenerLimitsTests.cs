@@ -155,6 +155,20 @@ public sealed class JsonTreeFlattenerLimitsTests
 	}
 
 	[Fact]
+	public async Task The_Root_Opens_Even_When_Its_Children_Are_Over_The_Row_Limit()
+	{
+		string objects = string.Join(',', Enumerable.Range(0, 50).Select(i => $"{{\"id\":{i}}}"));
+		await using JsonDocumentManager source = await ParseAsync($"[{objects}]");
+		var flattener = new JsonTreeFlattener();
+
+		bool truncated = flattener.ExpandToDepth(source, 2, new JsonExpandLimits(MaxRows: 10));
+
+		Assert.True(truncated);
+		Assert.Equal([""], flattener.ExpandedPaths);
+		Assert.Equal(52, flattener.Flatten(source).Count);
+	}
+
+	[Fact]
 	public async Task Grouped_Root_Counts_Its_Groups_Rather_Than_Its_Children_Against_The_Limit()
 	{
 		await using JsonDocumentManager source = await ParseAsync(NumberArray(1000));

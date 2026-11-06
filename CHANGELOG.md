@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.7.1] - 2026-11-06
+
+### ⚡ Performance
+- The first view of a large document opens at most 2,000 rows. A long array of small objects could open up to 100,000, parsing each object, which added about 7 s to loading a 1.4 MB document with 60,000 items
+
+### 🧪 Tests
+- The Expand All test no longer renders 100,000 rows as markup, which made it fail on slow CI runners
+
 ## [0.7.0] - 2026-11-06
 
 ### ⚡ Large files

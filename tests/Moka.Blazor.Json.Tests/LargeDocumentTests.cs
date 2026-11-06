@@ -170,6 +170,20 @@ public sealed class LargeDocumentTests
 	}
 
 	[Fact]
+	public async Task First_View_Of_A_Long_Array_Of_Small_Objects_Parses_Nothing()
+	{
+		string objects = string.Join(',', Enumerable.Range(0, 60_000).Select(i => $"{{\"a\":{i},\"b\":{{\"c\":1}}}}"));
+		await using LazyJsonDocumentSource source = await CreateLazyAsync($"[{objects}]", "default", true);
+		var flattener = new JsonTreeFlattener();
+
+		flattener.ExpandToDepth(source, 2, JsonExpandLimits.LargeDocumentFirstView);
+		List<FlattenedJsonNode> rows = flattener.Flatten(source);
+
+		Assert.Equal(60_002, rows.Count);
+		Assert.Equal(0, source.DebugStats.SubtreeParseCount);
+	}
+
+	[Fact]
 	public async Task Byte_Order_Mark_Is_Skipped()
 	{
 		byte[] bytes = [0xEF, 0xBB, 0xBF, .."""{"a":[1,2]}"""u8.ToArray()];
